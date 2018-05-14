@@ -5,6 +5,8 @@ import warnings
 from distutils.version import LooseVersion
 import project_tests as tests
 
+from simdata import ImageNpy
+
 # Check TensorFlow Version
 assert LooseVersion(tf.__version__) >= LooseVersion(
     '1.0'), 'Please use TensorFlow version 1.0 or newer.  You are using {}'.format(tf.__version__)
@@ -44,7 +46,7 @@ def load_vgg(sess, vgg_path):
     return w1, keep, layer_3_out, layer_4_out, layer_7_out
 
 
-tests.test_load_vgg(load_vgg, tf)
+#tests.test_load_vgg(load_vgg, tf)
 
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
@@ -90,7 +92,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     return final_output_layer
 
 
-tests.test_layers(layers)
+#tests.test_layers(layers)
 
 
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
@@ -113,7 +115,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     return logits, train_op, cross_entropy_loss
 
 
-tests.test_optimize(optimize)
+#tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label,
@@ -133,12 +135,12 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param saver: tf.train.Saver object
     """
 
-    sess.run(tf.global_variables_initializer())
+    #sess.run(tf.global_variables_initializer())
 
     tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
     merged = tf.summary.merge_all()
 
-    train_writer = tf.summary.FileWriter('./log' + '/train',sess.graph)
+    train_writer = tf.summary.FileWriter('./log' + '/train')
 
     count = 0
     for ep in range(epochs):
@@ -156,12 +158,13 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     train_writer.close()
 
 
-tests.test_train_nn(train_nn)
+#tests.test_train_nn(train_nn)
 
 
 def run():
-    num_classes = 2
+    num_classes = 3
     image_shape = (640, 832)
+    #image_shape = (64, 64)
     vgg_data_dir = './data'
 
     data_dir = './data'
@@ -180,7 +183,9 @@ def run():
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
         # Create function to get batches
-        get_batches_fn = helper.gen_batch_function(data_dir, image_shape)
+        # get_batches_fn = helper.gen_batch_function(data_dir, image_shape)
+        image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
+        get_batches_fn=image_data.get_batches_fn
 
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
@@ -194,8 +199,6 @@ def run():
         layer_output = layers(layer3_out, layer4_out, layer7_out, num_classes)
         logits, train_op, cross_entropy_loss = optimize(layer_output,
                                                         correct_label, learning_rate, num_classes)
-
-        tf.summary.scalar("cross_entropy_loss", cross_entropy_loss)
 
         # set up a saver object
         saver = tf.train.Saver()

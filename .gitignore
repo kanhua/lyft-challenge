@@ -8,7 +8,7 @@ model_ckpt/
 log/
 runs/
 data.zip
-
+model_archive/
 
 # User-specific stuff:
 .idea/**/workspace.xml

@@ -5,3 +5,5 @@ gtFine_trainvaltest/
 vgg16.npy
 CameraRGB/
 CameraSeg/
+
+*.npy
