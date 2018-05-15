@@ -13,6 +13,11 @@ from tqdm import tqdm
 from skimage import transform as sktf
 import skimage.io
 import skimage.transform
+from PIL import Image
+from io import BytesIO, StringIO
+import sys, base64
+
+
 
 
 class DLProgress(tqdm):
@@ -60,6 +65,8 @@ def maybe_download_pretrained_vgg(data_dir):
         # Remove zip file to save space
         os.remove(os.path.join(vgg_path, vgg_filename))
 
+
+maybe_download_pretrained_vgg(data_dir="./data")
 
 def gen_batch_function(data_folder, image_shape):
     """
@@ -182,17 +189,15 @@ class ImageProcess(object):
         self.image_shape = image_shape
         self.logits = logits
 
+        car_hood_mask = np.load("hood_mask.npy")
+        car_hood_mask = skimage.transform.resize(car_hood_mask, self.image_shape).astype(np.bool)
+        self.car_hood_mask = np.reshape(car_hood_mask, (*self.image_shape, 1))
+
     def pipeline(self, orig_image):
         image_shape = self.image_shape
         original_image_shape = orig_image.shape
 
-        image = scipy.misc.imresize(orig_image, image_shape)
-
-        im_softmax = self.sess.run(
-            [tf.nn.softmax(self.logits)],
-            {self.keep_prob: 1.0, self.image_pl: [image]})
-        im_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
-        segmentation = (im_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
+        image, segmentation = self.classify(orig_image, 1)
         mask = np.dot(segmentation, np.array([[0, 255, 0, 127]]))
         mask = scipy.misc.toimage(mask, mode="RGBA")
         street_im = scipy.misc.toimage(image)
@@ -201,3 +206,46 @@ class ImageProcess(object):
         street_im = scipy.misc.imresize(street_im, original_image_shape[0:2])
 
         return np.array(street_im)
+
+    def classify(self, orig_image, label):
+
+        # TODO document what labels do
+        image_shape = self.image_shape
+        image = scipy.misc.imresize(orig_image, image_shape)
+        im_softmax = self.sess.run(
+            [tf.nn.softmax(self.logits)],
+            {self.keep_prob: 1.0, self.image_pl: [image]})
+        im_softmax = im_softmax[0][:, label].reshape(image_shape[0], image_shape[1])
+
+        # TODO delete redundant reshape
+        segmentation = (im_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
+        segmentation *= self.car_hood_mask
+
+        # TODO need to restore to original image shape
+
+        return image, segmentation
+
+    def get_encoded_sets(self, image_array):
+        _, binary_road_result = self.classify(image_array, 1)
+        _, binary_car_result = self.classify(image_array, 2)
+
+        # The following code were used to debug the output of self.classify()
+        #import pickle
+        #pickle.dump(binary_road_result, open("temp.dump", 'wb'))
+
+        # TODO magic 600x800 here
+        binary_car_result = binary_car_result.astype(np.bool).reshape(*binary_car_result.shape[0:2])
+        binary_road_result = binary_road_result.astype(np.bool).reshape(*binary_road_result.shape[0:2])
+
+        binary_car_result = skimage.transform.resize(binary_car_result, (600, 800)).astype(np.uint8)
+        binary_road_result = skimage.transform.resize(binary_road_result, (600, 800)).astype(np.uint8)
+
+        return [encode(binary_car_result), encode(binary_road_result)]
+
+
+# Define encoder function
+def encode(array):
+    pil_img = Image.fromarray(array)
+    buff = BytesIO()
+    pil_img.save(buff, format="PNG")
+    return base64.b64encode(buff.getvalue()).decode("utf-8")

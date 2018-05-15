@@ -7,16 +7,7 @@ import project_tests as tests
 
 from simdata import ImageNpy
 
-# Check TensorFlow Version
-assert LooseVersion(tf.__version__) >= LooseVersion(
-    '1.0'), 'Please use TensorFlow version 1.0 or newer.  You are using {}'.format(tf.__version__)
-print('TensorFlow Version: {}'.format(tf.__version__))
 
-# Check for a GPU
-if not tf.test.gpu_device_name():
-    warnings.warn('No GPU found. Please use a GPU to train your neural network.')
-else:
-    print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
 
 
 def load_vgg(sess, vgg_path):
@@ -58,7 +49,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :param num_classes: Number of classes to classify
     :return: The Tensor for the last layer of output
     """
-    # TODO: Implement function
 
     layer_7_conv_1x1 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, padding='same',
                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
@@ -165,7 +155,7 @@ def run():
     num_classes = 3
     image_shape = (640, 832)
     #image_shape = (64, 64)
-    vgg_data_dir = './data'
+    vgg_dir = './data'
 
     data_dir = './data'
     val_data_dir = './data/'
@@ -173,32 +163,28 @@ def run():
     # tests.test_for_kitti_dataset(data_dir)
 
     # Download pretrained vgg model
-    helper.maybe_download_pretrained_vgg(vgg_data_dir)
+    #helper.maybe_download_pretrained_vgg(vgg_dir)
 
     # OPTIONAL: Train and Inference on the cityscapes dataset instead of the Kitti dataset.
     # You'll need a GPU with at least 10 teraFLOPS to train on.
     #  https://www.cityscapes-dataset.com/
 
+    image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
+    get_batches_fn = image_data.get_batches_fn
+
     with tf.Session() as sess:
         # Path to vgg model
-        vgg_path = os.path.join(data_dir, 'vgg')
         # Create function to get batches
         # get_batches_fn = helper.gen_batch_function(data_dir, image_shape)
-        image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
-        get_batches_fn=image_data.get_batches_fn
+
 
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # correct_label_image=tf.placeholder(tf.int32,[None,image_shape[0],image_shape[1]],name="correct_label_image")
         # correct_label = tf.placeholder(correct_label_image, depth=num_classes, name='correct_label')
-        correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
-        learning_rate = tf.placeholder(tf.float32, name='learning_rate')
 
-        input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
-        layer_output = layers(layer3_out, layer4_out, layer7_out, num_classes)
-        logits, train_op, cross_entropy_loss = optimize(layer_output,
-                                                        correct_label, learning_rate, num_classes)
+        input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate = foward_pass(num_classes, sess, vgg_dir)
 
         # set up a saver object
         saver = tf.train.Saver()
@@ -208,12 +194,33 @@ def run():
             saver.restore(sess, ckpt.model_checkpoint_path)
 
         # Train NN using the train_nn function
-        #train_nn(sess, 50, 10, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label, keep_prob,
-        #         learning_rate, saver)
+        train_nn(sess, 50, 10, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label, keep_prob,
+                 learning_rate, saver)
 
         # Save inference data using helper.save_inference_samples
         helper.save_inference_samples_2(runs_dir, val_data_dir, sess, image_shape, logits, keep_prob, input_image)
 
 
+def foward_pass(num_classes, sess, vgg_dir):
+    vgg_path = os.path.join(vgg_dir, 'vgg')
+    correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
+    learning_rate = tf.placeholder(tf.float32, name='learning_rate')
+    input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
+    layer_output = layers(layer3_out, layer4_out, layer7_out, num_classes)
+    logits, train_op, cross_entropy_loss = optimize(layer_output,
+                                                    correct_label, learning_rate, num_classes)
+    return input_image, keep_prob, logits,train_op,cross_entropy_loss, correct_label, learning_rate
+
+
 if __name__ == '__main__':
+    # Check TensorFlow Version
+    assert LooseVersion(tf.__version__) >= LooseVersion(
+        '1.0'), 'Please use TensorFlow version 1.0 or newer.  You are using {}'.format(tf.__version__)
+    print('TensorFlow Version: {}'.format(tf.__version__))
+
+    # Check for a GPU
+    if not tf.test.gpu_device_name():
+        warnings.warn('No GPU found. Please use a GPU to train your neural network.')
+    else:
+        print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
     run()

@@ -11,14 +11,14 @@ student_output = sys.argv[1]
 
 def decode(packet):
     img = base64.b64decode(packet)
-    filename = '/home/workspace/Example/image.png'
+    filename = 'image.png'
     with open(filename, 'wb') as f:
         f.write(img)
     result = misc.imread(filename)
     return result
 
 
-with open('/home/workspace/Example/results.json') as json_data:
+with open('results.json') as json_data:
     ans_data = json.loads(json_data.read())
     json_data.close()
 
