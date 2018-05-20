@@ -18,8 +18,6 @@ from io import BytesIO, StringIO
 import sys, base64
 
 
-
-
 class DLProgress(tqdm):
     last_block = 0
 

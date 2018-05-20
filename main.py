@@ -8,6 +8,12 @@ import project_tests as tests
 from simdata import ImageNpy
 
 
+def vgg_encoder(sess, vgg_path, num_classes):
+    input_image, keep, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
+
+    final_output_layer = layers(layer3_out, layer4_out, layer7_out, num_classes)
+
+    return input_image, keep, final_output_layer
 
 
 def load_vgg(sess, vgg_path):
@@ -17,7 +23,6 @@ def load_vgg(sess, vgg_path):
     :param vgg_path: Path to vgg folder, containing "variables/" and "saved_model.pb"
     :return: Tuple of Tensors from VGG model (image_input, keep_prob, layer3_out, layer4_out, layer7_out)
     """
-    # TODO: Implement function
     #   Use tf.saved_model.loader.load to load the model and weights
     vgg_tag = 'vgg16'
     vgg_input_tensor_name = 'image_input:0'
@@ -28,16 +33,16 @@ def load_vgg(sess, vgg_path):
 
     tf.saved_model.loader.load(sess, [vgg_tag], vgg_path)
     graph = tf.get_default_graph()
-    w1 = graph.get_tensor_by_name(vgg_input_tensor_name)
+    input_image = graph.get_tensor_by_name(vgg_input_tensor_name)
     keep = graph.get_tensor_by_name(vgg_keep_prob_tensor_name)
     layer_3_out = graph.get_tensor_by_name(vgg_layer3_out_tensor_name)
     layer_4_out = graph.get_tensor_by_name(vgg_layer4_out_tensor_name)
     layer_7_out = graph.get_tensor_by_name(vgg_layer7_out_tensor_name)
 
-    return w1, keep, layer_3_out, layer_4_out, layer_7_out
+    return input_image, keep, layer_3_out, layer_4_out, layer_7_out
 
 
-#tests.test_load_vgg(load_vgg, tf)
+# tests.test_load_vgg(load_vgg, tf)
 
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
@@ -82,7 +87,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     return final_output_layer
 
 
-#tests.test_layers(layers)
+# tests.test_layers(layers)
 
 
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
@@ -94,7 +99,6 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     :param num_classes: Number of classes to classify
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
-    # TODO: Implement function
 
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
     correct_label = tf.reshape(correct_label, (-1, num_classes))
@@ -105,7 +109,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     return logits, train_op, cross_entropy_loss
 
 
-#tests.test_optimize(optimize)
+# tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label,
@@ -125,7 +129,8 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param saver: tf.train.Saver object
     """
 
-    #sess.run(tf.global_variables_initializer())
+    # sess.run(tf.global_variables_initializer())
+    print(tf.global_variables(scope=None))
 
     tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
     merged = tf.summary.merge_all()
@@ -148,13 +153,13 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     train_writer.close()
 
 
-#tests.test_train_nn(train_nn)
+# tests.test_train_nn(train_nn)
 
 
 def run():
     num_classes = 3
     image_shape = (640, 832)
-    #image_shape = (64, 64)
+    # image_shape = (64, 64)
     vgg_dir = './data'
 
     data_dir = './data'
@@ -163,7 +168,7 @@ def run():
     # tests.test_for_kitti_dataset(data_dir)
 
     # Download pretrained vgg model
-    #helper.maybe_download_pretrained_vgg(vgg_dir)
+    # helper.maybe_download_pretrained_vgg(vgg_dir)
 
     # OPTIONAL: Train and Inference on the cityscapes dataset instead of the Kitti dataset.
     # You'll need a GPU with at least 10 teraFLOPS to train on.
@@ -177,14 +182,14 @@ def run():
         # Create function to get batches
         # get_batches_fn = helper.gen_batch_function(data_dir, image_shape)
 
-
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # correct_label_image=tf.placeholder(tf.int32,[None,image_shape[0],image_shape[1]],name="correct_label_image")
         # correct_label = tf.placeholder(correct_label_image, depth=num_classes, name='correct_label')
 
-        input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate = foward_pass(num_classes, sess, vgg_dir)
+        input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate = foward_pass(
+            num_classes, sess, vgg_dir)
 
         # set up a saver object
         saver = tf.train.Saver()
@@ -194,8 +199,8 @@ def run():
             saver.restore(sess, ckpt.model_checkpoint_path)
 
         # Train NN using the train_nn function
-        train_nn(sess, 50, 10, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label, keep_prob,
-                 learning_rate, saver)
+        #train_nn(sess, 50, 10, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label, keep_prob,
+        #         learning_rate, saver)
 
         # Save inference data using helper.save_inference_samples
         helper.save_inference_samples_2(runs_dir, val_data_dir, sess, image_shape, logits, keep_prob, input_image)
@@ -205,11 +210,11 @@ def foward_pass(num_classes, sess, vgg_dir):
     vgg_path = os.path.join(vgg_dir, 'vgg')
     correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
     learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-    input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
-    layer_output = layers(layer3_out, layer4_out, layer7_out, num_classes)
+
+    input_image, keep_prob, layer_output = vgg_encoder(sess, vgg_path, num_classes)
     logits, train_op, cross_entropy_loss = optimize(layer_output,
                                                     correct_label, learning_rate, num_classes)
-    return input_image, keep_prob, logits,train_op,cross_entropy_loss, correct_label, learning_rate
+    return input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate
 
 
 if __name__ == '__main__':
