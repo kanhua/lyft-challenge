@@ -2,10 +2,12 @@ import os.path
 import tensorflow as tf
 import helper
 import warnings
+import numpy as np
 from distutils.version import LooseVersion
 import project_tests as tests
 
 from simdata import ImageNpy
+
 
 
 def vgg_encoder(sess, vgg_path, num_classes):
@@ -129,8 +131,8 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param saver: tf.train.Saver object
     """
 
-    # sess.run(tf.global_variables_initializer())
-    print(tf.global_variables(scope=None))
+    sess.run(tf.global_variables_initializer())
+    #print(tf.global_variables(scope=None))
 
     tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
     merged = tf.summary.merge_all()
@@ -141,14 +143,15 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     for ep in range(epochs):
         print("epoch: {}".format(ep))
         for image, label in get_batches_fn(batch_size):
+            image=image.astype(np.float32)/128-1
             summary, _, loss = sess.run([merged, train_op, cross_entropy_loss],
-                                        feed_dict={input_image: image, correct_label: label, keep_prob: 0.5,
+                                        feed_dict={input_image: image, correct_label: label, #keep_prob: 0.5,
                                                    learning_rate: 0.001})
             print("loss: = {:.5f}".format(loss))
             train_writer.add_summary(summary, count)
             count += 1
-            if saver is not None:
-                saver.save(sess, './model_ckpt/model')
+        if saver is not None:
+            saver.save(sess, './model_ckpt/model')
 
     train_writer.close()
 
@@ -158,7 +161,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
 def run():
     num_classes = 3
-    image_shape = (640, 832)
+    image_shape = (224, 224)
     # image_shape = (64, 64)
     vgg_dir = './data'
 
@@ -188,8 +191,8 @@ def run():
         # correct_label_image=tf.placeholder(tf.int32,[None,image_shape[0],image_shape[1]],name="correct_label_image")
         # correct_label = tf.placeholder(correct_label_image, depth=num_classes, name='correct_label')
 
-        input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate = foward_pass(
-            num_classes, sess, vgg_dir)
+        input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate = foward_pass_2(
+            num_classes)
 
         # set up a saver object
         saver = tf.train.Saver()
@@ -200,7 +203,7 @@ def run():
 
         # Train NN using the train_nn function
         #train_nn(sess, 50, 10, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label, keep_prob,
-        #         learning_rate, saver)
+        #         learning_rate, saver=saver)
 
         # Save inference data using helper.save_inference_samples
         helper.save_inference_samples_2(runs_dir, val_data_dir, sess, image_shape, logits, keep_prob, input_image)
@@ -212,6 +215,17 @@ def foward_pass(num_classes, sess, vgg_dir):
     learning_rate = tf.placeholder(tf.float32, name='learning_rate')
 
     input_image, keep_prob, layer_output = vgg_encoder(sess, vgg_path, num_classes)
+    logits, train_op, cross_entropy_loss = optimize(layer_output,
+                                                    correct_label, learning_rate, num_classes)
+    return input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate
+
+def foward_pass_2(num_classes):
+    correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
+    learning_rate = tf.placeholder(tf.float32, name='learning_rate')
+
+    from mobilenet_v1_fcn8 import mobilenetv1_fcn8
+    input_image,layer_output,_=mobilenetv1_fcn8(num_classes=num_classes)
+    keep_prob=None
     logits, train_op, cross_entropy_loss = optimize(layer_output,
                                                     correct_label, learning_rate, num_classes)
     return input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate

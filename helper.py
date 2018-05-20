@@ -133,10 +133,11 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
 
     for image_file in glob(os.path.join(data_folder, 'CameraRGB', '*.png')):
         image = scipy.misc.imresize(skimage.io.imread(image_file), image_shape)
-
+        # TODO do this image normalization properly
+        image=image.astype(np.float32)/128-1
         raw_im_softmax = sess.run(
             [tf.nn.softmax(logits)],
-            {keep_prob: 1.0, image_pl: [image]})
+            { image_pl: [image]})
         street_im = scipy.misc.toimage(image)
         for color_index in range(non_trivial_class):
             im_softmax = raw_im_softmax[0][:, color_index + 1].reshape(image_shape[0], image_shape[1])

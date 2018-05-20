@@ -103,7 +103,7 @@ def gen_batch_function(data_folder, image_shape):
 
 
 if __name__ == "__main__":
-    preprocess_images("./data", (640, 832))
+    preprocess_images("./data", (224, 224))
 
     image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
     for x, y in image_data.get_batches_fn(5):
