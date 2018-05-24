@@ -8,6 +8,8 @@ import project_tests as tests
 
 from simdata import ImageNpy
 
+from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
+
 
 def vgg_encoder(sess, vgg_path, num_classes):
     input_image, keep, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
@@ -169,18 +171,31 @@ def train_mobilenet_v1_fcn8():
     import tensorflow.contrib.slim as slim
     model_path = "./pretrained_models/mobilenet_v1_1.0_224_ckpt/mobilenet_v1_1.0_224.ckpt"
 
-    from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
 
-    input_image = tf.placeholder(tf.float32, shape=(None, None, None, 3))
-    correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
+    input_image = tf.placeholder(tf.uint8, shape=(None, None, None, 3))
+    correct_label = tf.placeholder(tf.uint8, [None, None, None, num_classes], name='correct_label')
     learning_rate = tf.placeholder(tf.float32, name='learning_rate')
 
-    final_layer, endpoints = mobilenetv1_fcn8_model(input_image, num_classes=3, is_training=True)
+    stacked_image_label = tf.concat((input_image, correct_label), axis=2)
+
+    from inception_preprocessing import crop_image_label_for_train
+
+    cropped_stacked_image_label=tf.map_fn(lambda img: crop_image_label_for_train(img,224,224,add_image_summaries=False,
+                                                                                 bbox=None),
+                                          stacked_image_label)
+
+    cropped_input_image=cropped_stacked_image_label[:,:,:,0:3]
+    cropped_label=cropped_stacked_image_label[:,:,:,3:3+num_classes]
+
+
+
+
+    final_layer, endpoints = mobilenetv1_fcn8_model(cropped_input_image, num_classes=3, is_training=True)
 
     get_var = slim.get_model_variables('MobilenetV1')
     sess_load = slim.assign_from_checkpoint_fn(model_path, get_var)
 
-    logits, train_op, cross_entropy_loss = optimize(final_layer, correct_label, learning_rate, num_classes)
+    logits, train_op, cross_entropy_loss = optimize(final_layer, cropped_label, learning_rate, num_classes)
 
     tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
 
@@ -233,14 +248,30 @@ def eval_mobilenet_v1_fcn8(image):
 
     return result_car_binary,result_road_binary
 
+def mask_engine_hood(softmax_tensor):
+
+    car_hood_mask = np.load("hood_mask.npy")
+
+    mask=tf.constant(car_hood_mask,dtype=np.float32)
+
+    masked_softmax=tf.map_fn(lambda x: tf.multiply(x,mask),softmax_tensor)
+
+    return masked_softmax
+
+
+
 
 def build_eval_graph():
     num_classes = 3
-    from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
     input_image = tf.placeholder(tf.float32, shape=(None, None, None, 3))
     final_layer, endpoints = mobilenetv1_fcn8_model(input_image, num_classes=num_classes, is_training=False)
     softmax_car = endpoints['resized_softmax_car']
     softmax_road = endpoints['resized_softmax_road']
+
+    with tf.variable_scope("car_pred"):
+        softmax_car=mask_engine_hood(softmax_car)
+    with tf.variable_scope("road_pred"):
+        softmax_road=mask_engine_hood(softmax_road)
     return input_image, softmax_car, softmax_road
 
 

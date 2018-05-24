@@ -139,7 +139,9 @@ def distorted_bounding_box_crop(image,
     # bounding box. If no box is supplied, then we assume the bounding box is
     # the entire image.
     sample_distorted_bounding_box = tf.image.sample_distorted_bounding_box(
+        #MONKEY PATCH!!
         tf.shape(image),
+        #(224,224),
         bounding_boxes=bbox,
         min_object_covered=min_object_covered,
         aspect_ratio_range=aspect_ratio_range,
@@ -239,6 +241,52 @@ def preprocess_for_train(image, height, width, bbox,
     distorted_image = tf.subtract(distorted_image, 0.5)
     distorted_image = tf.multiply(distorted_image, 2.0)
     return distorted_image
+
+
+def crop_image_label_for_train(image_label, height, width, bbox,
+                               fast_mode=True,
+                               scope=None,
+                               add_image_summaries=True):
+
+    assert image_label.dtype == tf.uint8
+    with tf.name_scope(scope, 'distort_image', [image_label, height, width, bbox]):
+        if bbox is None:
+            bbox = tf.constant([0.0, 0.0, 1.0, 1.0],
+                               dtype=tf.float32,
+                               shape=[1, 1, 4])
+        # Each bounding box has shape [1, num_boxes, box coords] and
+        # the coordinates are ordered [ymin, xmin, ymax, xmax].
+
+        image_part = tf.image.convert_image_dtype(image_label[:, :, 0:3], dtype=tf.float32)
+
+        image_with_box = tf.image.draw_bounding_boxes(tf.expand_dims(image_part, 0),
+                                                      bbox)
+        if add_image_summaries:
+            tf.summary.image('image_with_bounding_boxes', image_with_box)
+
+        distorted_image_label, distorted_bbox = distorted_bounding_box_crop(image_label, bbox)
+        # Restore the shape since the dynamic slice based upon the bbox_size loses
+        # the third dimension.
+        distorted_image_label.set_shape([None, None, 4])
+        image_with_distorted_box = tf.image.draw_bounding_boxes(
+            tf.expand_dims(image_part, 0), distorted_bbox)
+        if add_image_summaries:
+            tf.summary.image('images_with_distorted_bounding_box',
+                             image_with_distorted_box)
+
+        # Randomly flip the image_label horizontally.
+        distorted_image_label = tf.image.random_flip_left_right(distorted_image_label)
+
+        with tf.variable_scope("flip"):
+            if add_image_summaries:
+                distorted_image_part=tf.image.convert_image_dtype(distorted_image_label[:,:,0:3],dtype=tf.float32)
+                tf.summary.image('random_reflected_images_with_distorted_bounding_box',
+                             tf.expand_dims(distorted_image_part,0))
+
+        return distorted_image_label
+
+
+
 
 
 def preprocess_for_eval(image, height, width,
