@@ -2,11 +2,21 @@ import os.path
 from glob import glob
 import numpy as np
 import skimage.io
+import skimage.transform
 import scipy.misc
 import random
+import matplotlib.pyplot as plt
 
 
-def preprocess_images(data_folder, image_shape):
+def preprocess_images(data_folder, image_shape=None, crop_coordiates=None):
+    """
+    preprocess image and write them to npy files.
+
+    :param data_folder:
+    :param image_shape: (height, width). None: no resize
+    :param crop_coordiates: tuple of (y_min, x_min, y_max, x_max) integer coordinates. None: no cropping
+    :return:
+    """
     image_paths = glob(os.path.join(data_folder, 'CameraRGB', '*.png'))
     label_paths = glob(os.path.join(data_folder, 'CameraSeg', '*.png'))
 
@@ -14,20 +24,33 @@ def preprocess_images(data_folder, image_shape):
     gt_images = []
 
     for i in range(0, len(image_paths), 1):
-        image = scipy.misc.imresize(skimage.io.imread(image_paths[i]), image_shape)
 
-        images.append(image.astype(dtype=np.uint8))
+        image = skimage.io.imread(image_paths[i],format='png')
+        gt_image = skimage.io.imread(label_paths[i],format='png')
+        #gt_image=gt_image.astype(np.uint8)
 
-        gt_image = scipy.misc.imresize(skimage.io.imread(label_paths[i]), image_shape)
 
-        gt_image = gt_image[:, :, 0]
+        if crop_coordiates is not None:
+            y_min, x_min, y_max, x_max = crop_coordiates
+            image = image[y_min:y_max, x_min:x_max, :]
+            gt_image = gt_image[y_min:y_max, x_min:x_max, :]
 
-        gt_road = (gt_image == 7)
-        gt_veh = (gt_image == 10)
-        gt_bg = np.logical_not(np.logical_or(gt_road, gt_veh))
-        # gt_bg = gt_bg.reshape(*gt_bg.shape, 1)
-        # gt_image = np.concatenate((gt_bg, np.invert(gt_bg)), axis=2)
-        gt_image = np.stack((gt_bg, gt_road, gt_veh), axis=-1)
+        if image_shape is not None:
+            image = skimage.transform.resize(image, image_shape,preserve_range=True)
+            gt_image = skimage.transform.resize(gt_image, image_shape,preserve_range=True)
+
+        image=image.astype(np.uint8)
+        gt_image=gt_image.astype(np.uint8)
+
+        assert gt_image.max()>1
+
+        if i == 0:
+            plt.imshow(image)
+            plt.show()
+
+        images.append(image)
+
+        gt_image = gen_one_hot_image(gt_image)
 
         gt_images.append(gt_image)
 
@@ -35,6 +58,17 @@ def preprocess_images(data_folder, image_shape):
     gt_images = np.array(gt_images)
     np.save("./data/train_data.npy", images)
     np.save("./data/train_label.npy", gt_images)
+
+
+def gen_one_hot_image(gt_image):
+    gt_image = gt_image[:, :, 0]
+    gt_road = (gt_image == 7)
+    gt_veh = (gt_image == 10)
+    gt_bg = np.logical_not(np.logical_or(gt_road, gt_veh))
+    # gt_bg = gt_bg.reshape(*gt_bg.shape, 1)
+    # gt_image = np.concatenate((gt_bg, np.invert(gt_bg)), axis=2)
+    gt_image = np.stack((gt_bg, gt_road, gt_veh), axis=-1)
+    return gt_image
 
 
 class ImageNpy(object):
@@ -45,7 +79,7 @@ class ImageNpy(object):
         self.data_entry_num = self.images.shape[0]
 
     def get_batches_fn(self, batch_size):
-        data_entries=np.arange(0, self.data_entry_num, 1)
+        data_entries = np.arange(0, self.data_entry_num, 1)
         np.random.shuffle(data_entries)
 
         for batch_i in range(0, self.data_entry_num, batch_size):
@@ -103,9 +137,10 @@ def gen_batch_function(data_folder, image_shape):
 
 
 if __name__ == "__main__":
-    preprocess_images("./data", (224, 224))
+    preprocess_images("./data", image_shape=(224,224), crop_coordiates=(0, 0, 520, 800))
 
     image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
     for x, y in image_data.get_batches_fn(5):
         print(x.shape)
         print(y.shape)
+        skimage.io.imsave("testout.png", x[0])

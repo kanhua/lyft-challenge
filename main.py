@@ -9,7 +9,6 @@ import project_tests as tests
 from simdata import ImageNpy
 
 
-
 def vgg_encoder(sess, vgg_path, num_classes):
     input_image, keep, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
 
@@ -95,6 +94,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     """
     Build the TensorFLow loss and optimizer operations.
+
     :param nn_last_layer: TF Tensor of the last layer in the neural network
     :param correct_label: TF Placeholder for the correct label image
     :param learning_rate: TF Placeholder for the learning rate
@@ -132,7 +132,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     """
 
     sess.run(tf.global_variables_initializer())
-    #print(tf.global_variables(scope=None))
+    # print(tf.global_variables(scope=None))
 
     tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
     merged = tf.summary.merge_all()
@@ -143,9 +143,9 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     for ep in range(epochs):
         print("epoch: {}".format(ep))
         for image, label in get_batches_fn(batch_size):
-            image=image.astype(np.float32)/128-1
+            image = image.astype(np.float32) / 128 - 1
             summary, _, loss = sess.run([merged, train_op, cross_entropy_loss],
-                                        feed_dict={input_image: image, correct_label: label, #keep_prob: 0.5,
+                                        feed_dict={input_image: image, correct_label: label,  # keep_prob: 0.5,
                                                    learning_rate: 0.001})
             print("loss: = {:.5f}".format(loss))
             train_writer.add_summary(summary, count)
@@ -157,6 +157,91 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
 
 # tests.test_train_nn(train_nn)
+
+def train_mobilenet_v1_fcn8():
+    num_classes = 3
+    image_shape = (224, 224)
+
+    image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
+    get_batches_fn = image_data.get_batches_fn
+
+    # Load pretrained mobilenet_v1
+    import tensorflow.contrib.slim as slim
+    model_path = "./pretrained_models/mobilenet_v1_1.0_224_ckpt/mobilenet_v1_1.0_224.ckpt"
+
+    from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
+
+    input_image = tf.placeholder(tf.float32, shape=(None, None, None, 3))
+    correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
+    learning_rate = tf.placeholder(tf.float32, name='learning_rate')
+
+    final_layer, endpoints = mobilenetv1_fcn8_model(input_image, num_classes=3, is_training=True)
+
+    get_var = slim.get_model_variables('MobilenetV1')
+    sess_load = slim.assign_from_checkpoint_fn(model_path, get_var)
+
+    logits, train_op, cross_entropy_loss = optimize(final_layer, correct_label, learning_rate, num_classes)
+
+    tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
+
+    merged = tf.summary.merge_all()
+
+    saver = tf.train.Saver()
+
+    with tf.Session() as sess:
+        sess_load(sess)
+        sess.run(tf.global_variables_initializer())
+        train_writer = tf.summary.FileWriter('./log' + '/train', sess.graph)
+
+        count = 0
+        epochs = 50
+        batch_size = 20
+        for ep in range(epochs):
+            print("epoch: {}".format(ep))
+            for image, label in get_batches_fn(batch_size):
+                summary, _, loss = sess.run([merged, train_op, cross_entropy_loss],
+                                            feed_dict={input_image: image, correct_label: label,
+                                                       learning_rate: 0.001})
+                print("loss: = {:.5f}".format(loss))
+                train_writer.add_summary(summary, count)
+                count += 1
+            saver.save(sess, './model_ckpt/model')
+
+
+def eval_mobilenet_v1_fcn8(image):
+    input_image, softmax_car, softmax_road = build_eval_graph()
+
+    model_path = "./model_ckpt/model"
+
+    merged = tf.summary.merge_all()
+
+    saver = tf.train.Saver()
+
+    with tf.Session() as sess:
+        # sess.run(tf.global_variables_initializer())
+        saver.restore(sess, model_path)
+        train_writer = tf.summary.FileWriter('./log' + '/test', sess.graph)
+
+        count = 0
+        summary, result_car_image,result_road_image = sess.run([merged, softmax_car,softmax_road],
+                                             feed_dict={input_image: image})
+        train_writer.add_summary(summary, count)
+        count += 1
+
+    result_car_binary=(result_car_image>0.5)
+    result_road_binary=(result_road_image>0.5)
+
+    return result_car_binary,result_road_binary
+
+
+def build_eval_graph():
+    num_classes = 3
+    from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
+    input_image = tf.placeholder(tf.float32, shape=(None, None, None, 3))
+    final_layer, endpoints = mobilenetv1_fcn8_model(input_image, num_classes=num_classes, is_training=False)
+    softmax_car = endpoints['resized_softmax_car']
+    softmax_road = endpoints['resized_softmax_road']
+    return input_image, softmax_car, softmax_road
 
 
 def run():
@@ -190,6 +275,12 @@ def run():
 
         # correct_label_image=tf.placeholder(tf.int32,[None,image_shape[0],image_shape[1]],name="correct_label_image")
         # correct_label = tf.placeholder(correct_label_image, depth=num_classes, name='correct_label')
+        import tensorflow.contrib.slim as slim
+        model_path = "./pretrained_models/mobilenet_v1_1.0_224_ckpt/mobilenet_v1_1.0_224.ckpt"
+        get_var = slim.get_model_variables('MobilenetV1')
+        sess_load = slim.assign_from_checkpoint_fn(model_path, get_var)
+
+        sess_load(sess)
 
         input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate = foward_pass_2(
             num_classes)
@@ -202,8 +293,8 @@ def run():
             saver.restore(sess, ckpt.model_checkpoint_path)
 
         # Train NN using the train_nn function
-        #train_nn(sess, 50, 10, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label, keep_prob,
-        #         learning_rate, saver=saver)
+        train_nn(sess, 50, 10, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label, keep_prob,
+                 learning_rate, saver=saver)
 
         # Save inference data using helper.save_inference_samples
         helper.save_inference_samples_2(runs_dir, val_data_dir, sess, image_shape, logits, keep_prob, input_image)
@@ -219,13 +310,14 @@ def foward_pass(num_classes, sess, vgg_dir):
                                                     correct_label, learning_rate, num_classes)
     return input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate
 
-def foward_pass_2(num_classes):
+
+def foward_pass_2(num_classes, is_training):
     correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
     learning_rate = tf.placeholder(tf.float32, name='learning_rate')
 
     from mobilenet_v1_fcn8 import mobilenetv1_fcn8
-    input_image,layer_output,_=mobilenetv1_fcn8(num_classes=num_classes)
-    keep_prob=None
+    input_image, layer_output, _ = mobilenetv1_fcn8(num_classes=num_classes)
+    keep_prob = None
     logits, train_op, cross_entropy_loss = optimize(layer_output,
                                                     correct_label, learning_rate, num_classes)
     return input_image, keep_prob, logits, train_op, cross_entropy_loss, correct_label, learning_rate
@@ -242,4 +334,4 @@ if __name__ == '__main__':
         warnings.warn('No GPU found. Please use a GPU to train your neural network.')
     else:
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-    run()
+    train_mobilenet_v1_fcn8()

@@ -2,19 +2,78 @@ import sys
 
 sys.path.append('/Users/kanhua/Dropbox/github/models/research/slim')
 
-import tensorflow as tf
-
 import math
 import numpy as np
 import tensorflow as tf
 import time
 import PIL
-from datasets import imagenet
 
 # Main slim library
 from tensorflow.contrib import slim
+from mobilenet_v1 import mobilenet_v1, mobilenet_v1_arg_scope
 
-from nets import mobilenet_v1
+
+def linear_activation(x):
+    return x
+
+
+def mobilenet_rescale_from_uint8(images):
+    images = tf.divide(images, 128)
+    images = tf.subtract(images, 1)
+    return images
+
+
+def mobilenet_rescale_from_float(images):
+    images = tf.multiply(images, 2)
+    images = tf.subtract(images, 1)
+    return images
+
+
+def mobilenetv1_fcn8_model(images, num_classes, is_training=False):
+    from inception_preprocessing import preprocess_image
+
+    raw_image_shape=tf.shape(images)
+
+    # images=tf.map_fn(lambda img: preprocess_image(img,224,224,is_training), images)
+
+    tf.summary.image('input_image_before_rescale',
+                     tf.expand_dims(images[0], 0))
+
+    images = mobilenet_rescale_from_uint8(images)
+
+    if not is_training:
+        images = tf.image.resize_images(images, size=(224, 224))
+        tf.summary.image('input_image_before_rescale_for_eval',
+                         tf.expand_dims(images[0], 0))
+
+    with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope()) as sc:
+        m_logits, end_points = mobilenet_v1(images, is_training=is_training, num_classes=1001)
+
+    layer4 = end_points['Conv2d_4_pointwise']
+    layer6 = end_points['Conv2d_6_pointwise']
+    layer13 = end_points['Conv2d_13_pointwise']
+
+    last_layer = mobilenet_v1_fcn_decoder(layer13, layer4, layer6, num_classes)
+
+    with tf.variable_scope("post_processing"):
+        im_softmax = tf.nn.softmax(last_layer)
+        if raw_image_shape[1:3] != tf.constant((224,224)):
+            resized_im_softmax = tf.image.resize_images(im_softmax, size=raw_image_shape[1:3])
+        else:
+            resized_im_softmax = im_softmax
+        end_points['im_softmax_zero'] = im_softmax[:, :, :, 0]
+        end_points['im_softmax_road'] = im_softmax[:, :, :, 1]
+        end_points['im_softmax_car'] = im_softmax[:, :, :, 2]
+        tf.summary.image('output_softmax_before_rescale',
+                         tf.expand_dims(tf.expand_dims(im_softmax[0, :, :, 0], 0), 3))
+
+        end_points['resized_softmax_zero'] = resized_im_softmax[:, :, :, 0]
+        end_points['resized_softmax_road'] = resized_im_softmax[:, :, :, 1]
+        end_points['resized_softmax_car'] = resized_im_softmax[:, :, :, 2]
+        tf.summary.image('output_softmax_after_rescale',
+                         tf.expand_dims(tf.expand_dims(resized_im_softmax[0, :, :, 0], 0), 3))
+
+    return last_layer, end_points
 
 
 def mobilenetv1_fcn8(num_classes=3):
@@ -22,7 +81,7 @@ def mobilenetv1_fcn8(num_classes=3):
     layer6_out_name = 'MobilenetV1/MobilenetV1/Conv2d_6_pointwise/Relu6:0'
     layer13_out_name = 'MobilenetV1/MobilenetV1/Conv2d_13_pointwise/Relu6:0'
 
-    model_fname = "/Users/kanhua/Dropbox/Programming/tensorflow-math/mobilenet_v1_1.0_224_ckpt/mobilenet_v1_1.0_224_frozen.pb"
+    model_fname = "./pretrained_models/mobilenet_v1_1.0_224_ckpt/mobilenet_v1_1.0_224_frozen.pb"
     # detect_graph = tf.Graph()
     detect_graph = tf.get_default_graph()
     with detect_graph.as_default():
@@ -39,25 +98,31 @@ def mobilenetv1_fcn8(num_classes=3):
             # double_x=tf.subtract(x,x)
 
     with detect_graph.as_default():
-        with slim.arg_scope([slim.conv2d_transpose, slim.conv2d], padding='same', num_outputs=num_classes,
-                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
-                            weights_initializer=tf.random_normal_initializer(stddev=0.01)):
-            layer_13_convt = slim.conv2d_transpose(layer_13, kernel_size=(4, 4), stride=(2, 2))
-            layer_6_conv = slim.conv2d(layer_6, kernel_size=(1, 1), stride=(1, 1))
-
-            layer_seed_1 = tf.add(layer_13_convt, layer_6_conv)
-
-            layer_seed_1_convt = slim.conv2d_transpose(layer_seed_1, kernel_size=(4, 4),
-                                                       stride=(2, 2))
-
-            layer_4_conv = slim.conv2d(layer_4, kernel_size=(1, 1), stride=(1, 1))
-
-            layer_seed_2 = tf.add(layer_seed_1_convt, layer_4_conv)
-
-            layer_logits = slim.conv2d_transpose(layer_seed_2, kernel_size=(16, 16),
-                                                 stride=(8, 8))
+        layer_logits = mobilenet_v1_fcn_decoder(layer_13, layer_4, layer_6, num_classes)
 
     return image_pl, layer_logits, detect_graph
+
+
+def mobilenet_v1_fcn_decoder(layer_13, layer_4, layer_6, num_classes):
+    with slim.arg_scope([slim.conv2d_transpose, slim.conv2d], padding='same', num_outputs=num_classes,
+                        weights_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                        weights_initializer=tf.random_normal_initializer(stddev=0.01),
+                        activation_fn=linear_activation):
+        layer_13_convt = slim.conv2d_transpose(layer_13, kernel_size=(4, 4), stride=(2, 2))
+        layer_6_conv = slim.conv2d(layer_6, kernel_size=(1, 1), stride=(1, 1))
+
+        layer_seed_1 = tf.add(layer_13_convt, layer_6_conv)
+
+        layer_seed_1_convt = slim.conv2d_transpose(layer_seed_1, kernel_size=(4, 4),
+                                                   stride=(2, 2))
+
+        layer_4_conv = slim.conv2d(layer_4, kernel_size=(1, 1), stride=(1, 1))
+
+        layer_seed_2 = tf.add(layer_seed_1_convt, layer_4_conv)
+
+        layer_logits = slim.conv2d_transpose(layer_seed_2, kernel_size=(16, 16),
+                                             stride=(8, 8))
+    return layer_logits
 
 
 def show_graph(tf_graph):
@@ -69,8 +134,8 @@ def show_graph(tf_graph):
 
         writer.close()
 
-    #import subprocess
-    #subprocess.run(["tensorboard", "--logdir=$(pwd)" + logdir])
+    # import subprocess
+    # subprocess.run(["tensorboard", "--logdir=$(pwd)" + logdir])
 
 
 if __name__ == "__main__":

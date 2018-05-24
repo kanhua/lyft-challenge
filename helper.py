@@ -211,9 +211,10 @@ class ImageProcess(object):
         # TODO document what labels do
         image_shape = self.image_shape
         image = scipy.misc.imresize(orig_image, image_shape)
+        norm_image=image.astype(np.float32)/128-1
         im_softmax = self.sess.run(
             [tf.nn.softmax(self.logits)],
-            {self.keep_prob: 1.0, self.image_pl: [image]})
+            { self.image_pl: [norm_image]})
         im_softmax = im_softmax[0][:, label].reshape(image_shape[0], image_shape[1])
 
         # TODO delete redundant reshape
