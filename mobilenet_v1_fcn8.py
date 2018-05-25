@@ -29,25 +29,34 @@ def mobilenet_rescale_from_float(images):
     return images
 
 
-def mobilenetv1_fcn8_model(images, num_classes, is_training=False):
+def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shape=(600,800)):
     from inception_preprocessing import preprocess_image
 
-    raw_image_shape=tf.shape(images)
+    train_image_shape = (224*2, 224*3)
 
     # images=tf.map_fn(lambda img: preprocess_image(img,224,224,is_training), images)
 
     tf.summary.image('input_image_before_rescale',
                      tf.expand_dims(images[0], 0))
 
-    images = mobilenet_rescale_from_uint8(images)
+    if images.dtype == tf.uint8:
+        images = tf.cast(images,dtype=tf.float32)
+        images = mobilenet_rescale_from_uint8(images)
+    elif images.dtype == tf.float32:
+        images = mobilenet_rescale_from_float(images)
+    else:
+        raise ValueError("the type of input image should be either uint8 or float32")
+
+    tf.summary.scalar("rescaled_image_sum",tf.reduce_sum(images[0],(0,1,2))/(600*800))
 
     if not is_training:
-        images = tf.image.resize_images(images, size=(224, 224))
-        tf.summary.image('input_image_before_rescale_for_eval',
+        images = tf.image.resize_images(images, size=train_image_shape)
+        tf.summary.image('input_image_after_rescale_and_resize',
                          tf.expand_dims(images[0], 0))
 
     with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope()) as sc:
-        m_logits, end_points = mobilenet_v1(images, is_training=is_training, num_classes=1001)
+        m_logits, end_points = mobilenet_v1(images, is_training=is_training, num_classes=1001,
+                                            spatial_squeeze=False)
 
     layer4 = end_points['Conv2d_4_pointwise']
     layer6 = end_points['Conv2d_6_pointwise']
@@ -57,8 +66,10 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False):
 
     with tf.variable_scope("post_processing"):
         im_softmax = tf.nn.softmax(last_layer)
-        if raw_image_shape[1:3] != tf.constant((224,224)):
-            resized_im_softmax = tf.image.resize_images(im_softmax, size=raw_image_shape[1:3])
+
+        # resize softmax if the the raw image size does not match the training image sizes
+        if raw_image_shape != tf.constant(train_image_shape):
+            resized_im_softmax = tf.image.resize_images(im_softmax, size=raw_image_shape)
         else:
             resized_im_softmax = im_softmax
         end_points['im_softmax_zero'] = im_softmax[:, :, :, 0]

@@ -25,10 +25,9 @@ def preprocess_images(data_folder, image_shape=None, crop_coordiates=None):
 
     for i in range(0, len(image_paths), 1):
 
-        image = skimage.io.imread(image_paths[i],format='png')
-        gt_image = skimage.io.imread(label_paths[i],format='png')
-        #gt_image=gt_image.astype(np.uint8)
-
+        image = skimage.io.imread(image_paths[i], format='png')
+        gt_image = skimage.io.imread(label_paths[i], format='png')
+        # gt_image=gt_image.astype(np.uint8)
 
         if crop_coordiates is not None:
             y_min, x_min, y_max, x_max = crop_coordiates
@@ -36,13 +35,13 @@ def preprocess_images(data_folder, image_shape=None, crop_coordiates=None):
             gt_image = gt_image[y_min:y_max, x_min:x_max, :]
 
         if image_shape is not None:
-            image = skimage.transform.resize(image, image_shape,preserve_range=True)
-            gt_image = skimage.transform.resize(gt_image, image_shape,preserve_range=True)
+            image = skimage.transform.resize(image, image_shape, preserve_range=True)
+            gt_image = skimage.transform.resize(gt_image, image_shape, preserve_range=True)
 
-        image=image.astype(np.uint8)
-        gt_image=gt_image.astype(np.uint8)
+        image = image.astype(np.uint8)
+        gt_image = gt_image.astype(np.uint8)
 
-        assert gt_image.max()>1
+        assert gt_image.max() > 1
 
         if i == 0:
             plt.imshow(image)
@@ -88,6 +87,26 @@ class ImageNpy(object):
 
             yield image_batch, label_batch
 
+    def get_bathes_fn_with_crop(self, batch_size, crop_size):
+        data_entries = np.arange(0, self.data_entry_num, 1)
+        np.random.shuffle(data_entries)
+        xw = crop_size[0]  # height
+        yw = crop_size[1]  # width
+        orig_xw = self.images.shape[1]
+        orig_yw = self.images.shape[2]
+
+        start_xw = np.random.randint(0, orig_xw - xw)
+        start_yw = np.random.randint(0, orig_yw - yw)
+
+        for batch_i in range(0, self.data_entry_num, batch_size):
+            image_batch = self.images[data_entries[batch_i:batch_i + batch_size],
+                          start_xw:start_xw + xw, start_yw:start_yw + yw, :]
+
+            label_batch = self.labels[data_entries[batch_i:batch_i + batch_size],
+                          start_xw:start_xw + xw, start_yw:start_yw + yw, :]
+
+            yield image_batch, label_batch
+
 
 def gen_batch_function(data_folder, image_shape):
     """
@@ -121,7 +140,7 @@ def gen_batch_function(data_folder, image_shape):
 
                 gt_image = gt_image[:, :, 0]
 
-                gt_road = (gt_image == 7)
+                gt_road = np.logical_or(gt_image == 7, gt_image == 6)
                 gt_veh = (gt_image == 10)
                 gt_bg = np.logical_not(np.logical_or(gt_road, gt_veh))
                 # gt_bg = gt_bg.reshape(*gt_bg.shape, 1)
@@ -137,7 +156,9 @@ def gen_batch_function(data_folder, image_shape):
 
 
 if __name__ == "__main__":
-    preprocess_images("./data", image_shape=None, crop_coordiates=(0, 0, 520, 800))
+    size1 = (448, 448 * 2)
+    size2 = None
+    preprocess_images("./data", image_shape=size2, crop_coordiates=(0, 0, 520, 800))
 
     image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
     for x, y in image_data.get_batches_fn(5):

@@ -6,11 +6,10 @@ from helper import encode
 import scipy.misc
 
 
-model_path = "./model_ckpt_kept/model"
+model_path = "./model_ckpt_udacity_trained/model"
 
-merged = tf.summary.merge_all()
 
-saver = tf.train.Saver()
+
 
 file = "./Example/test_video.mp4"
 
@@ -22,7 +21,7 @@ writer = skvideo.io.FFmpegWriter("outputvideo.mp4")
 
 video = skvideo.io.vread(file)
 
-input_image, softmax_car, softmax_road = build_eval_graph()
+
 
 
 def paste_mask(rgb_frame, result_binary):
@@ -33,9 +32,9 @@ def paste_mask(rgb_frame, result_binary):
     return street_im
 
 
-def infer_images(sess, expanded_rgb_frame, softmax_car, softmax_road, merged_summary):
+def infer_images(sess, input_image_pl,expanded_rgb_frame, softmax_car, softmax_road, merged_summary):
     summary, result_car_image, result_road_image = sess.run([merged_summary, softmax_car, softmax_road],
-                                                            feed_dict={input_image: expanded_rgb_frame})
+                                                            feed_dict={input_image_pl: expanded_rgb_frame})
     result_car_binary = (result_car_image > 0.5).astype(np.uint8)
     result_road_binary = (result_road_image > 0.5).astype(np.uint8)
 
@@ -60,10 +59,16 @@ class FrameEncoder(object):
 
         self.frame_count += 1
 
-
+import tensorflow.contrib.slim as slim
 with tf.Session() as sess:
     # sess.run(tf.global_variables_initializer())
-    saver.restore(sess, model_path)
+    input_image, softmax_car, softmax_road = build_eval_graph()
+    #saver=tf.train.Saver()
+    #saver.restore(sess,model_path)
+    get_var=slim.get_variables()
+    init_fn=slim.assign_from_checkpoint_fn(model_path,get_var)
+    init_fn(sess)
+
     train_writer = tf.summary.FileWriter('./log' + '/test', sess.graph)
 
     count = 0
@@ -74,15 +79,19 @@ with tf.Session() as sess:
 
     fe=FrameEncoder()
 
+    merged = tf.summary.merge_all()
+
     for rgb_frame_id, rgb_frame in enumerate(video):
         # print(rgb_frame.max())
         frame_batch.append(rgb_frame)
         batch_count += 1
-        if batch_count >= batch_size or rgb_frame_id==(video.shape[0]-1):
+        if batch_count >= batch_size or (rgb_frame_id==(video.shape[0]-1) and batch_count >0):
+
+            assert len(frame_batch)>0
 
             expanded_rgb_frame = np.array(frame_batch)
 
-            results = infer_images(sess, expanded_rgb_frame, softmax_car, softmax_road, merged)
+            results = infer_images(sess, input_image,expanded_rgb_frame, softmax_car, softmax_road, merged)
 
             result_road_binary = results['road_binary']
             result_car_binary = results['car_binary']
@@ -90,6 +99,8 @@ with tf.Session() as sess:
                 street_im = paste_mask(frame_in_batch, result_road_binary[idx])
                 writer.writeFrame(street_im)
                 fe.add_answer(result_car_binary[idx],result_road_binary[idx])
+
+            train_writer.add_summary(results['summary'],rgb_frame_id)
 
 
             batch_count = 0
