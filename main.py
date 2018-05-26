@@ -162,7 +162,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
 def train_mobilenet_v1_fcn8(load_model="latest"):
     num_classes = 3
-    image_shape = (224*2, 224*3)
+    image_shape = (224 * 2, 224 * 3)
 
     image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
     get_batches_fn = image_data.get_bathes_fn_with_crop
@@ -203,17 +203,17 @@ def train_mobilenet_v1_fcn8(load_model="latest"):
     saver = tf.train.Saver()
 
     with tf.Session() as sess:
-        if load_model=='mobilenetv1':
+        if load_model == 'mobilenetv1':
             get_var = slim.get_model_variables('MobilenetV1')
             sess_load = slim.assign_from_checkpoint_fn(pretrained_model_path, get_var)
             sess_load(sess)
             sess.run(tf.global_variables_initializer())
         elif load_model == "latest":
-            #saver.restore(sess,"./model_ckpt_udacity_trained/model")
-            get_var=slim.get_variables()
+            # saver.restore(sess,"./model_ckpt_udacity_trained/model")
+            get_var = slim.get_variables()
             sess_load = slim.assign_from_checkpoint_fn("./model_ckpt_udacity_trained/model", get_var)
             sess_load(sess)
-            #sess.run(tf.global_variables_initializer())
+            # sess.run(tf.global_variables_initializer())
         else:
             raise ValueError("model wrong!")
 
@@ -275,22 +275,29 @@ def mask_engine_hood(softmax_tensor):
 
 def build_eval_graph():
     num_classes = 3
-    train_image_shape=(224*2,224*3)
+    train_image_shape = (224 * 2, 224 * 3)
 
     input_image = tf.placeholder(tf.uint8, shape=(None, None, None, 3))
+    image_pad=tf.placeholder(tf.float32, shape=(None,None,None))
+    crop_input_image = input_image[:, 0:520, :, :]
 
     from mobilenet_v1_fcn8 import mobilenet_rescale_from_uint8
-    images=mobilenet_rescale_from_uint8(input_image)
+    images = mobilenet_rescale_from_uint8(crop_input_image)
     images = tf.image.resize_images(images, size=train_image_shape)
-    final_layer, endpoints = mobilenetv1_fcn8_model(images, num_classes=num_classes, is_training=True)
+    final_layer, endpoints = mobilenetv1_fcn8_model(images, num_classes=num_classes,
+                                                    is_training=True, raw_image_shape=(520, 800))
     softmax_car = endpoints['resized_softmax_car']
     softmax_road = endpoints['resized_softmax_road']
+
+    softmax_road = tf.concat((softmax_road,image_pad),1)
+    softmax_car = tf.concat((softmax_car,image_pad),1)
+
 
     with tf.variable_scope("car_pred"):
         softmax_car = mask_engine_hood(softmax_car)
     with tf.variable_scope("road_pred"):
         softmax_road = mask_engine_hood(softmax_road)
-    return input_image, softmax_car, softmax_road
+    return input_image, image_pad,softmax_car, softmax_road
 
 
 def run():

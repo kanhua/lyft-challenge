@@ -8,10 +8,9 @@ import scipy.misc
 
 model_path = "./model_ckpt_udacity_trained/model"
 
+import sys
 
-
-
-file = "./Example/test_video.mp4"
+file = sys.argv[-1]
 
 video = skvideo.io.vread(file)
 
@@ -32,9 +31,10 @@ def paste_mask(rgb_frame, result_binary):
     return street_im
 
 
-def infer_images(sess, input_image_pl,expanded_rgb_frame, softmax_car, softmax_road, merged_summary):
+def infer_images(sess, input_image_pl,image_pad_pl,expanded_rgb_frame, image_pad,softmax_car, softmax_road, merged_summary):
     summary, result_car_image, result_road_image = sess.run([merged_summary, softmax_car, softmax_road],
-                                                            feed_dict={input_image_pl: expanded_rgb_frame})
+                                                            feed_dict={input_image_pl: expanded_rgb_frame,
+                                                                       image_pad_pl:image_pad})
     result_car_binary = (result_car_image > 0.5).astype(np.uint8)
     result_road_binary = (result_road_image > 0.5).astype(np.uint8)
 
@@ -62,7 +62,7 @@ class FrameEncoder(object):
 import tensorflow.contrib.slim as slim
 with tf.Session() as sess:
     # sess.run(tf.global_variables_initializer())
-    input_image, softmax_car, softmax_road = build_eval_graph()
+    input_image, image_pad_pl,softmax_car, softmax_road = build_eval_graph()
     #saver=tf.train.Saver()
     #saver.restore(sess,model_path)
     get_var=slim.get_variables()
@@ -90,8 +90,10 @@ with tf.Session() as sess:
             assert len(frame_batch)>0
 
             expanded_rgb_frame = np.array(frame_batch)
+            expanded_rgb_frame=expanded_rgb_frame[:,:,:,:]
+            image_pad = np.zeros((expanded_rgb_frame.shape[0],600 - 520, 800))
 
-            results = infer_images(sess, input_image,expanded_rgb_frame, softmax_car, softmax_road, merged)
+            results = infer_images(sess, input_image,image_pad_pl, expanded_rgb_frame, image_pad,softmax_car, softmax_road, merged)
 
             result_road_binary = results['road_binary']
             result_car_binary = results['car_binary']
