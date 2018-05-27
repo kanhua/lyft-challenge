@@ -64,7 +64,7 @@ def maybe_download_pretrained_vgg(data_dir):
         os.remove(os.path.join(vgg_path, vgg_filename))
 
 
-maybe_download_pretrained_vgg(data_dir="./data")
+#maybe_download_pretrained_vgg(data_dir="./data")
 
 def gen_batch_function(data_folder, image_shape):
     """

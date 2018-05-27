@@ -211,7 +211,7 @@ def train_mobilenet_v1_fcn8(load_model="latest"):
         elif load_model == "latest":
             # saver.restore(sess,"./model_ckpt_udacity_trained/model")
             get_var = slim.get_variables()
-            sess_load = slim.assign_from_checkpoint_fn("./model_ckpt_udacity_trained/model", get_var)
+            sess_load = slim.assign_from_checkpoint_fn("./model_ckpt/model", get_var)
             sess_load(sess)
             # sess.run(tf.global_variables_initializer())
         else:

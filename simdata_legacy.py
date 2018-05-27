@@ -8,12 +8,10 @@ import random
 import matplotlib.pyplot as plt
 
 
-def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordiates=None, show_image=False):
+def preprocess_images(data_folder, image_shape=None, crop_coordiates=None):
     """
     preprocess image and write them to npy files.
 
-    :param show_image:
-    :param car_hood_mask:
     :param data_folder:
     :param image_shape: (height, width). None: no resize
     :param crop_coordiates: tuple of (y_min, x_min, y_max, x_max) integer coordinates. None: no cropping
@@ -31,9 +29,6 @@ def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordia
         gt_image = skimage.io.imread(label_paths[i], format='png')
         # gt_image=gt_image.astype(np.uint8)
 
-        if car_hood_mask is not None:
-            gt_image[:,:,0]=gt_image[:,:,0]*car_hood_mask
-
         if crop_coordiates is not None:
             y_min, x_min, y_max, x_max = crop_coordiates
             image = image[y_min:y_max, x_min:x_max, :]
@@ -48,11 +43,8 @@ def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordia
 
         assert gt_image.max() > 1
 
-        if i == 0 and show_image:
+        if i == 0:
             plt.imshow(image)
-            plt.show()
-            plt.figure()
-            plt.imshow(gt_image[:,:,0])
             plt.show()
 
         images.append(image)
@@ -116,15 +108,60 @@ class ImageNpy(object):
             yield image_batch, label_batch
 
 
+def gen_batch_function(data_folder, image_shape):
+    """
+    Generate function to create batches of training data
+    :param data_folder: Path to folder that contains all the datasets
+    :param image_shape: Tuple - Shape of image
+    :return:
+    """
+
+    def get_batches_fn(batch_size):
+        """
+        Create batches of training data
+        :param batch_size: Batch Size
+        :return: Batches of training data
+        """
+        image_paths = glob(os.path.join(data_folder, 'CameraRGB', '*.png'))
+        label_paths = {
+            os.path.basename(path): path
+            for path in glob(os.path.join(data_folder, 'CameraSeg', '*.png'))}
+        background_color = np.array([255, 0, 0])
+
+        random.shuffle(image_paths)
+        for batch_i in range(0, len(image_paths), batch_size):
+            images = []
+            gt_images = []
+            for image_file in image_paths[batch_i:batch_i + batch_size]:
+                gt_image_file = label_paths[os.path.basename(image_file)]
+
+                image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
+                gt_image = scipy.misc.imresize(skimage.io.imread(gt_image_file), image_shape)
+
+                gt_image = gt_image[:, :, 0]
+
+                gt_road = np.logical_or(gt_image == 7, gt_image == 6)
+                gt_veh = (gt_image == 10)
+                gt_bg = np.logical_not(np.logical_or(gt_road, gt_veh))
+                # gt_bg = gt_bg.reshape(*gt_bg.shape, 1)
+                # gt_image = np.concatenate((gt_bg, np.invert(gt_bg)), axis=2)
+                gt_image = np.stack((gt_bg, gt_road, gt_veh), axis=-1)
+
+                images.append(image)
+                gt_images.append(gt_image)
+
+            yield np.array(images), np.array(gt_images)
+
+    return get_batches_fn
+
 
 if __name__ == "__main__":
     size1 = (448, 448 * 2)
     size2 = None
-    car_hood_mask=np.load("hood_mask.npy")
-    preprocess_images("./data", car_hood_mask, image_shape=size2, crop_coordiates=(0, 0, 520, 800))
+    preprocess_images("./data", image_shape=size2, crop_coordiates=(0, 0, 520, 800))
 
     image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
     for x, y in image_data.get_batches_fn(5):
-        #print(x.shape)
-        #print(y.shape)
+        print(x.shape)
+        print(y.shape)
         skimage.io.imsave("testout.png", x[0])

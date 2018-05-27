@@ -6,7 +6,7 @@ from helper import encode
 import scipy.misc
 
 
-model_path = "./model_ckpt_udacity_trained/model"
+model_path = "./model_ckpt/model"
 
 import sys
 
@@ -75,7 +75,7 @@ with tf.Session() as sess:
 
     frame_batch = []
     batch_count = 0
-    batch_size = 5
+    batch_size = 100
 
     fe=FrameEncoder()
 
@@ -98,8 +98,8 @@ with tf.Session() as sess:
             result_road_binary = results['road_binary']
             result_car_binary = results['car_binary']
             for idx, frame_in_batch in enumerate(frame_batch):
-                street_im = paste_mask(frame_in_batch, result_road_binary[idx])
-                writer.writeFrame(street_im)
+                #street_im = paste_mask(frame_in_batch, result_road_binary[idx])
+                #writer.writeFrame(street_im)
                 fe.add_answer(result_car_binary[idx],result_road_binary[idx])
 
             train_writer.add_summary(results['summary'],rgb_frame_id)
