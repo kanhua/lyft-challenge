@@ -32,7 +32,7 @@ def infer_images(sess, input_image_pl,image_pad_pl,expanded_rgb_frame, image_pad
     summary, result_car_image, result_road_image = sess.run([merged_summary, softmax_car, softmax_road],
                                                             feed_dict={input_image_pl: expanded_rgb_frame,
                                                                        image_pad_pl:image_pad})
-    result_car_binary = (result_car_image > 0.5).astype(np.uint8)
+    result_car_binary = (result_car_image > 0.2).astype(np.uint8)
     result_road_binary = (result_road_image > 0.5).astype(np.uint8)
 
     results = {}

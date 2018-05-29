@@ -63,7 +63,8 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
 
     tf.summary.image('cropped_label', tf.expand_dims(cropped_label[:, :, :, 1], axis=3))
 
-    final_layer, endpoints = mobilenetv1_fcn8_model(cropped_input_image, num_classes=3, is_training=True)
+    final_layer, endpoints = mobilenetv1_fcn8_model(cropped_input_image, num_classes=3, is_training=True,
+                                                    raw_image_shape=(520,800))
 
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
 
@@ -100,7 +101,7 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
         batch_size = 20
         for ep in range(epochs):
             print("epoch: {}".format(ep))
-            for image, label in get_batches_fn(batch_size, crop_size=image_shape, shift_hue_prob=shift_hue_prob,
+            for image, label in get_batches_fn(batch_size, crop_size=None, shift_hue_prob=shift_hue_prob,
                                                filter=True):
                 summary, _, loss, step_count = sess.run([merged, train_op, cross_entropy_loss, global_step],
                                                         feed_dict={input_image: image, correct_label: label,
@@ -155,9 +156,9 @@ def build_eval_graph():
     crop_input_image = input_image[:, 0:520, :, :]
 
     from mobilenet_v1_fcn8 import mobilenet_rescale_from_uint8
-    images = mobilenet_rescale_from_uint8(crop_input_image)
-    images = tf.image.resize_images(images, size=train_image_shape)
-    final_layer, endpoints = mobilenetv1_fcn8_model(images, num_classes=num_classes,
+    #images = mobilenet_rescale_from_uint8(crop_input_image)
+    #images = tf.image.resize_images(images, size=train_image_shape)
+    final_layer, endpoints = mobilenetv1_fcn8_model(crop_input_image, num_classes=num_classes,
                                                     is_training=False, raw_image_shape=(520, 800))
     softmax_car = endpoints['resized_softmax_car']
     softmax_road = endpoints['resized_softmax_road']
@@ -183,4 +184,4 @@ if __name__ == '__main__':
         warnings.warn('No GPU found. Please use a GPU to train your neural network.')
     else:
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-    train_mobilenet_v1_fcn8(load_model='latest', shift_hue_prob=0.5)
+    train_mobilenet_v1_fcn8(load_model='mobilenetv1', shift_hue_prob=0.5)

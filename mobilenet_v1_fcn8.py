@@ -30,7 +30,6 @@ def mobilenet_rescale_from_float(images):
 
 
 def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shape=(600,800)):
-    from inception_preprocessing import preprocess_image
 
     train_image_shape = (224*2, 224*3)
 
@@ -47,9 +46,9 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shap
     else:
         raise ValueError("the type of input image should be either uint8 or float32")
 
-    tf.summary.scalar("rescaled_image_sum",tf.reduce_sum(images[0],(0,1,2))/(600*800))
+    #tf.summary.scalar("rescaled_image_sum",tf.reduce_sum(images[0],(0,1,2))/(600*800))
 
-    if not is_training:
+    if True:
         images = tf.image.resize_images(images, size=train_image_shape)
         tf.summary.image('input_image_after_rescale_and_resize',
                          tf.expand_dims(images[0], 0))
@@ -63,6 +62,9 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shap
     layer13 = end_points['Conv2d_13_pointwise']
 
     last_layer = mobilenet_v1_fcn_decoder(layer13, layer4, layer6, num_classes)
+
+    if raw_image_shape != tf.constant(train_image_shape):
+        last_layer = tf.image.resize_images(last_layer, size=raw_image_shape)
 
     with tf.variable_scope("post_processing"):
         im_softmax = tf.nn.softmax(last_layer)
