@@ -158,7 +158,7 @@ def build_eval_graph():
     images = mobilenet_rescale_from_uint8(crop_input_image)
     images = tf.image.resize_images(images, size=train_image_shape)
     final_layer, endpoints = mobilenetv1_fcn8_model(images, num_classes=num_classes,
-                                                    is_training=True, raw_image_shape=(520, 800))
+                                                    is_training=False, raw_image_shape=(520, 800))
     softmax_car = endpoints['resized_softmax_car']
     softmax_road = endpoints['resized_softmax_road']
 

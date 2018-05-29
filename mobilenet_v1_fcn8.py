@@ -54,8 +54,8 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shap
         tf.summary.image('input_image_after_rescale_and_resize',
                          tf.expand_dims(images[0], 0))
 
-    with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope()) as sc:
-        m_logits, end_points = mobilenet_v1(images, is_training=is_training, num_classes=1001,
+    with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope(is_training=is_training)) as sc:
+        m_logits, end_points = mobilenet_v1(images, num_classes=1001,
                                             spatial_squeeze=False)
 
     layer4 = end_points['Conv2d_4_pointwise']
