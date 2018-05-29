@@ -83,6 +83,10 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shap
         end_points['resized_softmax_car'] = resized_im_softmax[:, :, :, 2]
         tf.summary.image('output_softmax_after_rescale',
                          tf.expand_dims(tf.expand_dims(resized_im_softmax[0, :, :, 0], 0), 3))
+        tf.summary.image('car_softmax_after_rescale',
+                         tf.expand_dims(tf.expand_dims(resized_im_softmax[0, :, :, 2], 0), 3))
+        tf.summary.image('road_softmax_after_rescale',
+                         tf.expand_dims(tf.expand_dims(resized_im_softmax[0, :, :, 1], 0), 3))
 
     return last_layer, end_points
 

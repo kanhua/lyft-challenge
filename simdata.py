@@ -115,28 +115,32 @@ class ImageNpy(object):
         data_entries = np.arange(0, self.data_entry_num, 1)
         np.random.shuffle(data_entries)
 
-        train_data_entries=[]
+        train_data_entries = []
 
         threshold = 5000
         select_prob = 0.3
-        for idx in range(self.labels.shape[0]):
+        image_count = 0
+        idx = 0
+        while image_count < self.labels.shape[0]:
+            idx = idx % len(data_entries)
             car_count = np.sum(self.labels[data_entries[idx], :, :, _CAR_INDEX])
             if car_count < threshold:
                 if np.random.rand() < select_prob:
                     train_data_entries.append(data_entries[idx])
+                    image_count += 1
             else:
                 train_data_entries.append(data_entries[idx])
+                image_count += 1
+            idx += 1
         return np.array(train_data_entries)
 
-
-
-    def get_bathes_fn_with_crop(self, batch_size, crop_size, shift_hue_prob=1, shuffle=True,filter=False):
+    def get_bathes_fn_with_crop(self, batch_size, crop_size, shift_hue_prob=1, shuffle=True, filter=False):
         data_entries = np.arange(0, self.data_entry_num, 1)
         if shuffle:
             np.random.shuffle(data_entries)
 
         if filter:
-            data_entries=self.filter_low_vehicle()
+            data_entries = self.filter_low_vehicle()
 
         orig_xw = self.images.shape[1]
         orig_yw = self.images.shape[2]

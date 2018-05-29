@@ -11,8 +11,7 @@ from simdata import ImageNpy
 from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
 
 
-
-def optimize(nn_last_layer, correct_label, learning_rate, num_classes,global_step):
+def optimize(nn_last_layer, correct_label, learning_rate, num_classes, global_step):
     """
     Build the TensorFLow loss and optimizer operations.
 
@@ -27,12 +26,12 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes,global_ste
     correct_label = tf.reshape(correct_label, (-1, num_classes))
     cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-    train_op = optimizer.minimize(cross_entropy_loss,global_step=global_step)
+    train_op = optimizer.minimize(cross_entropy_loss, global_step=global_step)
 
     return logits, train_op, cross_entropy_loss
 
 
-def train_mobilenet_v1_fcn8(load_model="latest",shift_hue_prob=0):
+def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
     num_classes = 3
     image_shape = (224 * 2, 224 * 3)
 
@@ -69,10 +68,9 @@ def train_mobilenet_v1_fcn8(load_model="latest",shift_hue_prob=0):
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
 
     logits, train_op, cross_entropy_loss = optimize(final_layer, cropped_label,
-                                                    learning_rate, num_classes,global_step)
+                                                    learning_rate, num_classes, global_step)
 
     tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
-
 
     merged = tf.summary.merge_all()
 
@@ -93,8 +91,8 @@ def train_mobilenet_v1_fcn8(load_model="latest",shift_hue_prob=0):
         else:
             raise ValueError("model wrong!")
 
-        #print(slim.get_model_variables())
-        #print(len(slim.get_model_variables()))
+        # print(slim.get_model_variables())
+        # print(len(slim.get_model_variables()))
 
         train_writer = tf.summary.FileWriter('./log' + '/train', sess.graph)
 
@@ -102,10 +100,11 @@ def train_mobilenet_v1_fcn8(load_model="latest",shift_hue_prob=0):
         batch_size = 20
         for ep in range(epochs):
             print("epoch: {}".format(ep))
-            for image, label in get_batches_fn(batch_size, crop_size=image_shape,shift_hue_prob=shift_hue_prob,filter=True):
-                summary, _, loss,step_count = sess.run([merged, train_op, cross_entropy_loss,global_step],
-                                            feed_dict={input_image: image, correct_label: label,
-                                                       learning_rate: 0.001})
+            for image, label in get_batches_fn(batch_size, crop_size=image_shape, shift_hue_prob=shift_hue_prob,
+                                               filter=True):
+                summary, _, loss, step_count = sess.run([merged, train_op, cross_entropy_loss, global_step],
+                                                        feed_dict={input_image: image, correct_label: label,
+                                                                   learning_rate: 0.001})
                 print("loss: = {:.5f}".format(loss))
                 train_writer.add_summary(summary, global_step=step_count)
                 saver.save(sess, './model_ckpt/model')
@@ -152,7 +151,7 @@ def build_eval_graph():
     train_image_shape = (224 * 2, 224 * 3)
 
     input_image = tf.placeholder(tf.uint8, shape=(None, None, None, 3))
-    image_pad=tf.placeholder(tf.float32, shape=(None,None,None))
+    image_pad = tf.placeholder(tf.float32, shape=(None, None, None))
     crop_input_image = input_image[:, 0:520, :, :]
 
     from mobilenet_v1_fcn8 import mobilenet_rescale_from_uint8
@@ -163,17 +162,14 @@ def build_eval_graph():
     softmax_car = endpoints['resized_softmax_car']
     softmax_road = endpoints['resized_softmax_road']
 
-    softmax_road = tf.concat((softmax_road,image_pad),1)
-    softmax_car = tf.concat((softmax_car,image_pad),1)
-
+    softmax_road = tf.concat((softmax_road, image_pad), 1)
+    softmax_car = tf.concat((softmax_car, image_pad), 1)
 
     with tf.variable_scope("car_pred"):
         softmax_car = mask_engine_hood(softmax_car)
     with tf.variable_scope("road_pred"):
         softmax_road = mask_engine_hood(softmax_road)
-    return input_image, image_pad,softmax_car, softmax_road
-
-
+    return input_image, image_pad, softmax_car, softmax_road
 
 
 if __name__ == '__main__':
@@ -187,4 +183,4 @@ if __name__ == '__main__':
         warnings.warn('No GPU found. Please use a GPU to train your neural network.')
     else:
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-    train_mobilenet_v1_fcn8(load_model='mobilenetv1',shift_hue_prob=0.5)
+    train_mobilenet_v1_fcn8(load_model='latest', shift_hue_prob=0.5)
