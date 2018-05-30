@@ -10,11 +10,14 @@ import warnings
 
 _CAR_INDEX = 2
 
+UPPER_CUT=170
 
-def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordiates=None, show_image=False):
+def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordiates=None, show_image=False,
+                      car_pixel_threshold=0):
     """
     preprocess image and write them to npy files.
 
+    :param car_pixel_threshold:
     :param show_image:
     :param car_hood_mask:
     :param data_folder:
@@ -58,11 +61,19 @@ def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordia
             plt.imshow(gt_image[:, :, 0])
             plt.show()
 
-        images.append(image)
+        car_label=10
+        car_pixels=np.sum(gt_image[:,:,0]==car_label)
 
-        gt_image = gen_one_hot_image(gt_image)
+        if car_pixels>car_pixel_threshold:
 
-        gt_images.append(gt_image)
+            gt_image = gen_one_hot_image(gt_image)
+
+            images.append(image)
+
+            gt_images.append(gt_image)
+            if show_image and np.random.rand()<0.1:
+                skimage.io.imsave("./figures/image_{}.png".format(i),image)
+
 
     images = np.array(images)
     gt_images = np.array(gt_images)
@@ -176,7 +187,7 @@ if __name__ == "__main__":
     size1 = (448, 448 * 2)
     size2 = None
     car_hood_mask = np.load("hood_mask.npy")
-    preprocess_images("./data", car_hood_mask, image_shape=size2, crop_coordiates=(0, 0, 520, 800))
+    preprocess_images("./data", car_hood_mask, image_shape=size2, crop_coordiates=(170, 0, 520, 800))
 
     image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
     for x, y in image_data.get_batches_fn(5):

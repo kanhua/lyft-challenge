@@ -29,9 +29,11 @@ def mobilenet_rescale_from_float(images):
     return images
 
 
-def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shape=(600,800)):
+def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shape=(520-170,800)):
 
     train_image_shape = (224*2, 224*3)
+
+    #raw_image_shape=tf.constant((images.shape[2]),dtype=tf.int32)
 
     # images=tf.map_fn(lambda img: preprocess_image(img,224,224,is_training), images)
 

@@ -10,6 +10,7 @@ from simdata import ImageNpy
 
 from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
 
+from simdata import UPPER_CUT
 
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes, global_step):
     """
@@ -64,7 +65,7 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
     tf.summary.image('cropped_label', tf.expand_dims(cropped_label[:, :, :, 1], axis=3))
 
     final_layer, endpoints = mobilenetv1_fcn8_model(cropped_input_image, num_classes=3, is_training=True,
-                                                    raw_image_shape=(520,800))
+                                                    raw_image_shape=(520-UPPER_CUT,800))
 
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
 
@@ -149,28 +150,25 @@ def mask_engine_hood(softmax_tensor):
 
 def build_eval_graph():
     num_classes = 3
-    train_image_shape = (224 * 2, 224 * 3)
 
     input_image = tf.placeholder(tf.uint8, shape=(None, None, None, 3))
     image_pad = tf.placeholder(tf.float32, shape=(None, None, None))
-    crop_input_image = input_image[:, 0:520, :, :]
+    top_image_pad = tf.placeholder(tf.float32, shape=(None, None, None))
+    crop_input_image = input_image[:, UPPER_CUT:520, :, :]
 
-    from mobilenet_v1_fcn8 import mobilenet_rescale_from_uint8
-    #images = mobilenet_rescale_from_uint8(crop_input_image)
-    #images = tf.image.resize_images(images, size=train_image_shape)
     final_layer, endpoints = mobilenetv1_fcn8_model(crop_input_image, num_classes=num_classes,
-                                                    is_training=False, raw_image_shape=(520, 800))
+                                                    is_training=False, raw_image_shape=(520-UPPER_CUT, 800))
     softmax_car = endpoints['resized_softmax_car']
     softmax_road = endpoints['resized_softmax_road']
 
-    softmax_road = tf.concat((softmax_road, image_pad), 1)
-    softmax_car = tf.concat((softmax_car, image_pad), 1)
+    softmax_road = tf.concat((top_image_pad,softmax_road, image_pad), 1)
+    softmax_car = tf.concat((top_image_pad,softmax_car, image_pad), 1)
 
     with tf.variable_scope("car_pred"):
         softmax_car = mask_engine_hood(softmax_car)
     with tf.variable_scope("road_pred"):
         softmax_road = mask_engine_hood(softmax_road)
-    return input_image, image_pad, softmax_car, softmax_road
+    return input_image, image_pad, softmax_car, softmax_road,top_image_pad
 
 
 if __name__ == '__main__':
