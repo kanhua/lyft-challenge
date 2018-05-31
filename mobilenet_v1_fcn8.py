@@ -29,11 +29,17 @@ def mobilenet_rescale_from_float(images):
     return images
 
 
-def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shape=(520-170,800)):
+def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_shape=(520 - 170, 800),
+                           decoder='fcn8'):
+    train_image_shape = (224 * 2, 224 * 3)
 
-    train_image_shape = (224*2, 224*3)
-
-    #raw_image_shape=tf.constant((images.shape[2]),dtype=tf.int32)
+    if decoder=='fcn8':
+        decoder_fn=mobilenet_v1_fcn_decoder
+    elif decoder=='fcn8_upsample':
+        decoder_fn=mobilenet_v1_fcn8_upsample_decoder
+    else:
+        raise ValueError("the decoder should be either fcn8 or fcn8_upsample")
+    # raw_image_shape=tf.constant((images.shape[2]),dtype=tf.int32)
 
     # images=tf.map_fn(lambda img: preprocess_image(img,224,224,is_training), images)
 
@@ -41,14 +47,14 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shap
                      tf.expand_dims(images[0], 0))
 
     if images.dtype == tf.uint8:
-        images = tf.cast(images,dtype=tf.float32)
+        images = tf.cast(images, dtype=tf.float32)
         images = mobilenet_rescale_from_uint8(images)
     elif images.dtype == tf.float32:
         images = mobilenet_rescale_from_float(images)
     else:
         raise ValueError("the type of input image should be either uint8 or float32")
 
-    #tf.summary.scalar("rescaled_image_sum",tf.reduce_sum(images[0],(0,1,2))/(600*800))
+    # tf.summary.scalar("rescaled_image_sum",tf.reduce_sum(images[0],(0,1,2))/(600*800))
 
     if True:
         images = tf.image.resize_images(images, size=train_image_shape)
@@ -63,7 +69,7 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False,raw_image_shap
     layer6 = end_points['Conv2d_6_pointwise']
     layer13 = end_points['Conv2d_13_pointwise']
 
-    last_layer = mobilenet_v1_fcn_decoder(layer13, layer4, layer6, num_classes)
+    last_layer = decoder_fn(layer13, layer4, layer6, num_classes)
 
     if raw_image_shape != tf.constant(train_image_shape):
         last_layer = tf.image.resize_images(last_layer, size=raw_image_shape)
@@ -142,6 +148,31 @@ def mobilenet_v1_fcn_decoder(layer_13, layer_4, layer_6, num_classes):
         layer_logits = slim.conv2d_transpose(layer_seed_2, kernel_size=(16, 16),
                                              stride=(8, 8))
     return layer_logits
+
+
+def mobilenet_v1_fcn8_upsample_decoder(layer_13, layer_4, layer_6, num_classes):
+    with slim.arg_scope([slim.conv2d_transpose, slim.conv2d], padding='same', num_outputs=num_classes,
+                        weights_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                        weights_initializer=tf.random_normal_initializer(stddev=0.01),
+                        activation_fn=linear_activation, stride=(1, 1)):
+        shape = layer_13.shape.as_list()[1:3]
+        l13_up = tf.image.resize_images(layer_13, size=(2 * shape[0], 2 * shape[1]))
+        l13_up = slim.conv2d(l13_up, kernel_size=(1, 1), stride=(1, 1))
+        l6_up = slim.conv2d(layer_6, kernel_size=(1, 1), stride=(1, 1))
+        up_score_1 = tf.add(l13_up, l6_up)
+
+        shape = layer_6.shape.as_list()[1:3]
+        up_score_2 = tf.image.resize_images(up_score_1, size=(shape[0] * 2, shape[1] * 2))
+        up_score_2 = slim.conv2d(up_score_2, kernel_size=(1, 1))
+        l4_up = slim.conv2d(layer_4, kernel_size=(1, 1))
+        up_score_2 = tf.add(l4_up, up_score_2)
+
+        shape = up_score_2.shape.as_list()[1:3]
+        up_score_3 = tf.image.resize_images(up_score_2, size=(shape[0] * 8, shape[1] * 8))
+        layer_logits = slim.conv2d(up_score_3, kernel_size=(1, 1))
+
+        return layer_logits
+
 
 def show_graph(tf_graph):
     # with tf.Session(graph=detect_graph) as sess:
