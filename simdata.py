@@ -10,7 +10,10 @@ import warnings
 
 _CAR_INDEX = 2
 
-UPPER_CUT=170
+UPPER_CUT = 170
+
+CLASS_WEIGHT = np.array([[2.047828, 3.52548263, 10.25242643]])
+
 
 def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordiates=None, show_image=False,
                       car_pixel_threshold=0):
@@ -61,19 +64,18 @@ def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordia
             plt.imshow(gt_image[:, :, 0])
             plt.show()
 
-        car_label=10
-        car_pixels=np.sum(gt_image[:,:,0]==car_label)
+        car_label = 10
+        car_pixels = np.sum(gt_image[:, :, 0] == car_label)
 
-        if car_pixels>car_pixel_threshold:
+        if car_pixels > car_pixel_threshold:
 
             gt_image = gen_one_hot_image(gt_image)
 
             images.append(image)
 
             gt_images.append(gt_image)
-            if show_image and np.random.rand()<0.1:
-                skimage.io.imsave("./figures/image_{}.png".format(i),image)
-
+            if show_image and np.random.rand() < 0.1:
+                skimage.io.imsave("./figures/image_{}.png".format(i), image)
 
     images = np.array(images)
     gt_images = np.array(gt_images)

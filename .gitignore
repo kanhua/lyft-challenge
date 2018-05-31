@@ -9,6 +9,9 @@ log/
 runs/
 data.zip
 model_archive/
+pretrained_models/
+model_ckpt/
+data/
 
 # User-specific stuff:
 .idea/**/workspace.xml

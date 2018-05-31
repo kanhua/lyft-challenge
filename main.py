@@ -6,30 +6,50 @@ import numpy as np
 from distutils.version import LooseVersion
 import project_tests as tests
 
-from simdata import ImageNpy
+from simdata import ImageNpy, CLASS_WEIGHT
 
 from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
 
 from simdata import UPPER_CUT
+from inception_preprocessing import random_distort_images, preprocess_image_label
+import tensorflow.contrib.slim as slim
 
-def optimize(nn_last_layer, correct_label, learning_rate, num_classes, global_step):
+
+def optimize(nn_last_layer, correct_label, learning_rate, global_step):
     """
     Build the TensorFLow loss and optimizer operations.
 
     :param nn_last_layer: TF Tensor of the last layer in the neural network
     :param correct_label: TF Placeholder for the correct label image
     :param learning_rate: TF Placeholder for the learning rate
-    :param num_classes: Number of classes to classify
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
 
-    logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    correct_label = tf.reshape(correct_label, (-1, num_classes))
-    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
+    weight = tf.constant(CLASS_WEIGHT, dtype=tf.float32)
+    f_correct_label = tf.cast(correct_label, dtype=tf.float32)
+    weighted_label = tf.multiply(f_correct_label, weight)
+    #print(weighted_label.shape)
+
+    #weighted_label = tf.reshape(weighted_label, axis=1)
+    #weighted_label=tf.reshape(weighted_label,shape=(-1,3))
+    weighted_label=tf.reduce_sum(weighted_label,axis=3)
+    #print(weighted_label.shape)
+
+    r_correct_label = tf.reshape(correct_label, shape=(-1, 3))
+    r_last_layer = tf.reshape(nn_last_layer, shape=(-1, 3))
+    # r_weighted_label=tf.reshape(weighted_label,shape=(-1,3))
+
+    cross_entropy_image = tf.losses.softmax_cross_entropy(onehot_labels=r_correct_label,
+                                                          logits=r_last_layer)
+    cross_entropy_image=cross_entropy_image*weighted_label
+
+    cross_entropy_loss = tf.reduce_mean(cross_entropy_image)
+    # cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=nn_last_layer,
+    #                                                                               labels=correct_label))
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     train_op = optimizer.minimize(cross_entropy_loss, global_step=global_step)
 
-    return logits, train_op, cross_entropy_loss
+    return train_op, cross_entropy_loss
 
 
 def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
@@ -40,7 +60,6 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
     get_batches_fn = image_data.get_bathes_fn_with_crop
 
     # Load pretrained mobilenet_v1
-    import tensorflow.contrib.slim as slim
     pretrained_model_path = "./pretrained_models/mobilenet_v1_1.0_224_ckpt/mobilenet_v1_1.0_224.ckpt"
 
     input_image = tf.placeholder(tf.uint8, shape=(None, None, None, 3))
@@ -48,9 +67,6 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
     learning_rate = tf.placeholder(tf.float32, name='learning_rate')
 
     stacked_image_label = tf.concat((input_image, correct_label), axis=3)
-
-    from inception_preprocessing import crop_image_label_for_train, distort_color, random_distort_images, \
-        preprocess_image_label
 
     cropped_stacked_image_label = tf.map_fn(
         lambda img: preprocess_image_label(img, cropped_shape=None),
@@ -65,12 +81,11 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
     tf.summary.image('cropped_label', tf.expand_dims(cropped_label[:, :, :, 1], axis=3))
 
     final_layer, endpoints = mobilenetv1_fcn8_model(cropped_input_image, num_classes=3, is_training=True,
-                                                    raw_image_shape=(520-UPPER_CUT,800))
+                                                    raw_image_shape=(520 - UPPER_CUT, 800))
 
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
 
-    logits, train_op, cross_entropy_loss = optimize(final_layer, cropped_label,
-                                                    learning_rate, num_classes, global_step)
+    train_op, cross_entropy_loss = optimize(final_layer, cropped_label, learning_rate, global_step)
 
     tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
 
@@ -157,18 +172,18 @@ def build_eval_graph():
     crop_input_image = input_image[:, UPPER_CUT:520, :, :]
 
     final_layer, endpoints = mobilenetv1_fcn8_model(crop_input_image, num_classes=num_classes,
-                                                    is_training=False, raw_image_shape=(520-UPPER_CUT, 800))
+                                                    is_training=False, raw_image_shape=(520 - UPPER_CUT, 800))
     softmax_car = endpoints['resized_softmax_car']
     softmax_road = endpoints['resized_softmax_road']
 
-    softmax_road = tf.concat((top_image_pad,softmax_road, image_pad), 1)
-    softmax_car = tf.concat((top_image_pad,softmax_car, image_pad), 1)
+    softmax_road = tf.concat((top_image_pad, softmax_road, image_pad), 1)
+    softmax_car = tf.concat((top_image_pad, softmax_car, image_pad), 1)
 
     with tf.variable_scope("car_pred"):
         softmax_car = mask_engine_hood(softmax_car)
     with tf.variable_scope("road_pred"):
         softmax_road = mask_engine_hood(softmax_road)
-    return input_image, image_pad, softmax_car, softmax_road,top_image_pad
+    return input_image, image_pad, softmax_car, softmax_road, top_image_pad
 
 
 if __name__ == '__main__':
