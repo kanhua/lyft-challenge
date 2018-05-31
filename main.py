@@ -197,4 +197,4 @@ if __name__ == '__main__':
         warnings.warn('No GPU found. Please use a GPU to train your neural network.')
     else:
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-    train_mobilenet_v1_fcn8(load_model='mobilenetv1', shift_hue_prob=0.5)
+    train_mobilenet_v1_fcn8(load_model='latest', shift_hue_prob=0.5)

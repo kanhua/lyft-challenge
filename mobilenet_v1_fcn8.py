@@ -143,7 +143,6 @@ def mobilenet_v1_fcn_decoder(layer_13, layer_4, layer_6, num_classes):
                                              stride=(8, 8))
     return layer_logits
 
-
 def show_graph(tf_graph):
     # with tf.Session(graph=detect_graph) as sess:
 
