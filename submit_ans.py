@@ -15,7 +15,7 @@ file = sys.argv[-1]
 batch_size = 100
 video = skvideo.io.vread(file)
 num_classes = 3
-write_video=False
+write_video=True
 
 if write_video:
     writer = skvideo.io.FFmpegWriter("outputvideo.mp4")

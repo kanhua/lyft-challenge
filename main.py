@@ -8,7 +8,7 @@ import project_tests as tests
 
 from simdata import ImageNpy, CLASS_WEIGHT
 
-from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model
+from mobilenet_v1_fcn8 import mobilenetv1_fcn8_model,vgg16_fcn8_model
 
 from simdata import UPPER_CUT
 from inception_preprocessing import random_distort_images, preprocess_image_label
@@ -75,12 +75,12 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
     cropped_input_image = cropped_stacked_image_label[:, :, :, 0:3]
     cropped_label = cropped_stacked_image_label[:, :, :, 3:3 + num_classes]
 
-    cropped_input_image = tf.map_fn(random_distort_images, cropped_input_image, dtype=tf.float32)
+    # cropped_input_image = tf.map_fn(random_distort_images, cropped_input_image, dtype=tf.float32)
     # cropped_input_image=tf.map_fn(lambda img: distort_color(img),cropped_input_image)
 
     tf.summary.image('cropped_label', tf.expand_dims(cropped_label[:, :, :, 1], axis=3))
 
-    final_layer, endpoints = mobilenetv1_fcn8_model(cropped_input_image, num_classes=3, is_training=True,
+    final_layer, endpoints = vgg16_fcn8_model(cropped_input_image, num_classes=3, is_training=True,
                                                     raw_image_shape=(520 - UPPER_CUT, 800),
                                                     decoder="fcn8_upsample")
 
@@ -100,6 +100,13 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
             sess_load = slim.assign_from_checkpoint_fn(pretrained_model_path, get_var)
             sess_load(sess)
             sess.run(tf.global_variables_initializer())
+        elif load_model=='vgg16':
+            get_var = slim.get_model_variables('vgg_16')
+            vgg_pretrained_path="./pretrained_models/vgg16/vgg_16.ckpt"
+            sess_load = slim.assign_from_checkpoint_fn(vgg_pretrained_path, get_var)
+            sess_load(sess)
+            sess.run(tf.global_variables_initializer())
+
         elif load_model == "latest":
             # saver.restore(sess,"./model_ckpt_udacity_trained/model")
             get_var = slim.get_variables()
@@ -199,4 +206,4 @@ if __name__ == '__main__':
         warnings.warn('No GPU found. Please use a GPU to train your neural network.')
     else:
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-    train_mobilenet_v1_fcn8(load_model='mobilenetv1', shift_hue_prob=0.5)
+    train_mobilenet_v1_fcn8(load_model='vgg16', shift_hue_prob=0.5)

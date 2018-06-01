@@ -5,12 +5,12 @@ sys.path.append('/Users/kanhua/Dropbox/github/models/research/slim')
 import math
 import numpy as np
 import tensorflow as tf
-import time
-import PIL
 
 # Main slim library
 from tensorflow.contrib import slim
 from mobilenet_v1 import mobilenet_v1, mobilenet_v1_arg_scope
+import vgg
+import vgg_preprocessing
 
 
 def linear_activation(x):
@@ -33,35 +33,19 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_sha
                            decoder='fcn8'):
     train_image_shape = (224 * 2, 224 * 3)
 
-    if decoder=='fcn8':
-        decoder_fn=mobilenet_v1_fcn_decoder
-    elif decoder=='fcn8_upsample':
-        decoder_fn=mobilenet_v1_fcn8_upsample_decoder
+    if decoder == 'fcn8':
+        decoder_fn = mobilenet_v1_fcn_decoder
+    elif decoder == 'fcn8_upsample':
+        decoder_fn = mobilenet_v1_fcn8_upsample_decoder
     else:
         raise ValueError("the decoder should be either fcn8 or fcn8_upsample")
     # raw_image_shape=tf.constant((images.shape[2]),dtype=tf.int32)
 
     # images=tf.map_fn(lambda img: preprocess_image(img,224,224,is_training), images)
 
-    tf.summary.image('input_image_before_rescale',
-                     tf.expand_dims(images[0], 0))
+    images = rescale_and_resize_images(images, train_image_shape)
 
-    if images.dtype == tf.uint8:
-        images = tf.cast(images, dtype=tf.float32)
-        images = mobilenet_rescale_from_uint8(images)
-    elif images.dtype == tf.float32:
-        images = mobilenet_rescale_from_float(images)
-    else:
-        raise ValueError("the type of input image should be either uint8 or float32")
-
-    # tf.summary.scalar("rescaled_image_sum",tf.reduce_sum(images[0],(0,1,2))/(600*800))
-
-    if True:
-        images = tf.image.resize_images(images, size=train_image_shape)
-        tf.summary.image('input_image_after_rescale_and_resize',
-                         tf.expand_dims(images[0], 0))
-
-    with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope(is_training=is_training)) as sc:
+    with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope(is_training=is_training)):
         m_logits, end_points = mobilenet_v1(images, num_classes=1001,
                                             spatial_squeeze=False)
 
@@ -71,13 +55,75 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_sha
 
     last_layer = decoder_fn(layer13, layer4, layer6, num_classes)
 
+    last_layer = post_process_logits(end_points, last_layer, raw_image_shape, train_image_shape)
+
+    return last_layer, end_points
+
+
+def vgg16_fcn8_model(images, num_classes, is_training=False, raw_image_shape=(520 - 170, 800),
+                     decoder='fcn8'):
+    train_image_shape = (224 * 2, 224 * 3)
+
+    if decoder == 'fcn8':
+        decoder_fn = mobilenet_v1_fcn_decoder
+    elif decoder == 'fcn8_upsample':
+        decoder_fn = mobilenet_v1_fcn8_upsample_decoder
+    else:
+        raise ValueError("the decoder should be either fcn8 or fcn8_upsample")
+
+    if images.dtype != tf.uint8:
+        raise ValueError("the image should be uint8")
+
+    images = tf.image.resize_images(images, size=train_image_shape)
+    tf.summary.image('input_image_after_rescale_and_resize',
+                     tf.expand_dims(images[0], 0))
+
+    processed_images = tf.map_fn(vgg_preprocessing.vgg_image_rescale,
+                                 images,dtype=tf.float32)
+
+    # Create the model, use the default arg scope to configure the batch norm parameters.
+    with slim.arg_scope(vgg.vgg_arg_scope()):
+        # 1000 classes instead of 1001.
+        logits, end_points = vgg.vgg_16(processed_images, num_classes=1000,
+                                        is_training=is_training, spatial_squeeze=False)
+
+    layer4 = end_points['vgg_16/pool3']
+    layer6 = end_points['vgg_16/pool4']
+    layer13 = end_points['vgg_16/pool5']
+
+    last_layer = decoder_fn(layer13, layer4, layer6, num_classes)
+
+    last_layer = post_process_logits(end_points, last_layer, raw_image_shape, train_image_shape)
+
+    return last_layer, end_points
+
+
+def rescale_and_resize_images(images, train_image_shape):
+    tf.summary.image('input_image_before_rescale',
+                     tf.expand_dims(images[0], 0))
+    if images.dtype == tf.uint8:
+        images = tf.cast(images, dtype=tf.float32)
+        images = mobilenet_rescale_from_uint8(images)
+    elif images.dtype == tf.float32:
+        images = mobilenet_rescale_from_float(images)
+    else:
+        raise ValueError("the type of input image should be either uint8 or float32")
+    # tf.summary.scalar("rescaled_image_sum",tf.reduce_sum(images[0],(0,1,2))/(600*800))
+    if True:
+        images = tf.image.resize_images(images, size=train_image_shape)
+        tf.summary.image('input_image_after_rescale_and_resize',
+                         tf.expand_dims(images[0], 0))
+    return images
+
+
+def post_process_logits(end_points, last_layer, raw_image_shape, train_image_shape):
     if raw_image_shape != tf.constant(train_image_shape):
         last_layer = tf.image.resize_images(last_layer, size=raw_image_shape)
-
     with tf.variable_scope("post_processing"):
         im_softmax = tf.nn.softmax(last_layer)
 
         # resize softmax if the the raw image size does not match the training image sizes
+        # TODO this is redundant
         if raw_image_shape != tf.constant(train_image_shape):
             resized_im_softmax = tf.image.resize_images(im_softmax, size=raw_image_shape)
         else:
@@ -97,8 +143,7 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_sha
                          tf.expand_dims(tf.expand_dims(resized_im_softmax[0, :, :, 2], 0), 3))
         tf.summary.image('road_softmax_after_rescale',
                          tf.expand_dims(tf.expand_dims(resized_im_softmax[0, :, :, 1], 0), 3))
-
-    return last_layer, end_points
+    return last_layer
 
 
 def mobilenetv1_fcn8(num_classes=3):
