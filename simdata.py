@@ -11,15 +11,18 @@ import warnings
 _CAR_INDEX = 2
 
 UPPER_CUT = 170
+BOTTOM_CUT=520
 
 CLASS_WEIGHT = np.array([[2.047828, 3.52548263, 10.25242643]])
 
 
 def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordiates=None, show_image=False,
-                      car_pixel_threshold=0):
+                      car_pixel_threshold=0, image_file="./data/train_data.npy", label_file="./data/train_label.npy"):
     """
     preprocess image and write them to npy files.
 
+    :param label_file:
+    :param image_file:
     :param car_pixel_threshold:
     :param show_image:
     :param car_hood_mask:
@@ -34,7 +37,12 @@ def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordia
     images = []
     gt_images = []
 
-    for i in range(0, len(image_paths), 1):
+    data_entries=1000
+
+    shuffuled_index=np.random.permutation(len(image_paths))
+
+
+    for i in shuffuled_index:
 
         image = skimage.io.imread(image_paths[i], format='png')
         gt_image = skimage.io.imread(label_paths[i], format='png')
@@ -77,10 +85,13 @@ def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordia
             if show_image and np.random.rand() < 0.1:
                 skimage.io.imsave("./figures/image_{}.png".format(i), image)
 
+        if len(images)>=data_entries:
+            break
+
     images = np.array(images)
     gt_images = np.array(gt_images)
-    np.save("./data/train_data.npy", images)
-    np.save("./data/train_label.npy", gt_images)
+    np.save(image_file, images)
+    np.save(label_file, gt_images)
 
 
 def gen_one_hot_image(gt_image):
@@ -184,15 +195,35 @@ class ImageNpy(object):
 
             yield image_batch, label_batch
 
+def gen_validation_data():
 
-if __name__ == "__main__":
-    size1 = (448, 448 * 2)
+    val_data_path="/Users/kanhua/Downloads/data/Valid"
+    car_hood_mask = np.load("hood_mask.npy")
+    preprocess_images(val_data_path, car_hood_mask, image_shape=None, crop_coordiates=(UPPER_CUT, 0, BOTTOM_CUT, 800),
+                      image_file="./data/val_data.npy",label_file="./data/val_label.npy")
+
+
+def gen_general_train_data():
+
+    val_data_path="/Users/kanhua/Downloads/data/Train"
+    car_hood_mask = np.load("hood_mask.npy")
+    preprocess_images(val_data_path, car_hood_mask, image_shape=None, crop_coordiates=(UPPER_CUT, 0, BOTTOM_CUT, 800),
+                      image_file="./data/train_data_2.npy",label_file="./data/train_label_2.npy")
+
+
+def gen_train_data():
+
+    train_data_path="./data"
     size2 = None
     car_hood_mask = np.load("hood_mask.npy")
-    preprocess_images("./data", car_hood_mask, image_shape=size2, crop_coordiates=(170, 0, 520, 800))
+    preprocess_images("./data", car_hood_mask, image_shape=size2, crop_coordiates=(UPPER_CUT, 0, BOTTOM_CUT, 800))
 
-    image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
-    for x, y in image_data.get_batches_fn(5):
-        # print(x.shape)
-        # print(y.shape)
-        skimage.io.imsave("testout.png", x[0])
+
+
+if __name__ == "__main__":
+
+    #gen_validation_data()
+
+    gen_general_train_data()
+
+

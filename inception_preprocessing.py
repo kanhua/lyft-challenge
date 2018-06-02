@@ -243,7 +243,7 @@ def preprocess_for_train(image, height, width, bbox,
         return distorted_image
 
 
-def random_distort_images(distorted_image, fast_mode=1):
+def random_distort_images(distorted_image, fast_mode=False):
     with tf.name_scope('random_distort'):
         # if distorted_image.dtype != tf.float32:
         float_image = tf.image.convert_image_dtype(distorted_image, dtype=tf.float32)

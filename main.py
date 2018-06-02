@@ -75,14 +75,11 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
     cropped_input_image = cropped_stacked_image_label[:, :, :, 0:3]
     cropped_label = cropped_stacked_image_label[:, :, :, 3:3 + num_classes]
 
-    # cropped_input_image = tf.map_fn(random_distort_images, cropped_input_image, dtype=tf.float32)
-    # cropped_input_image=tf.map_fn(lambda img: distort_color(img),cropped_input_image)
-
     tf.summary.image('cropped_label', tf.expand_dims(cropped_label[:, :, :, 1], axis=3))
 
-    final_layer, endpoints = vgg16_fcn8_model(cropped_input_image, num_classes=3, is_training=True,
+    final_layer, endpoints = mobilenetv1_fcn8_model(cropped_input_image, num_classes=3, is_training=True,
                                                     raw_image_shape=(520 - UPPER_CUT, 800),
-                                                    decoder="fcn8_upsample")
+                                                    decoder="fcn8")
 
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
 
@@ -122,43 +119,17 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
         train_writer = tf.summary.FileWriter('./log' + '/train', sess.graph)
 
         epochs = 50
-        batch_size = 20
+        batch_size = 10
         for ep in range(epochs):
             print("epoch: {}".format(ep))
             for image, label in get_batches_fn(batch_size, crop_size=None, shift_hue_prob=shift_hue_prob,
                                                filter=True):
                 summary, _, loss, step_count = sess.run([merged, train_op, cross_entropy_loss, global_step],
                                                         feed_dict={input_image: image, correct_label: label,
-                                                                   learning_rate: 0.001})
+                                                                   learning_rate: 0.0005})
                 print("loss: = {:.5f}".format(loss))
                 train_writer.add_summary(summary, global_step=step_count)
                 saver.save(sess, './model_ckpt/model')
-
-
-def eval_mobilenet_v1_fcn8(image):
-    input_image, softmax_car, softmax_road = build_eval_graph()
-
-    model_path = "./model_ckpt/model"
-
-    merged = tf.summary.merge_all()
-
-    saver = tf.train.Saver()
-
-    with tf.Session() as sess:
-        # sess.run(tf.global_variables_initializer())
-        saver.restore(sess, model_path)
-        train_writer = tf.summary.FileWriter('./log' + '/test', sess.graph)
-
-        count = 0
-        summary, result_car_image, result_road_image = sess.run([merged, softmax_car, softmax_road],
-                                                                feed_dict={input_image: image})
-        train_writer.add_summary(summary, count)
-        count += 1
-
-    result_car_binary = (result_car_image > 0.5)
-    result_road_binary = (result_road_image > 0.5)
-
-    return result_car_binary, result_road_binary
 
 
 def mask_engine_hood(softmax_tensor):
@@ -181,7 +152,10 @@ def build_eval_graph():
 
     final_layer, endpoints = mobilenetv1_fcn8_model(crop_input_image, num_classes=num_classes,
                                                     is_training=False, raw_image_shape=(520 - UPPER_CUT, 800),
-                                                    decoder='fcn8_upsample')
+                                                    decoder='fcn8')
+    #data_num=input_image.get_shape().as_list()[0]
+    #t_top_image_pad=tf.zeros((data_num,180,800))
+
     softmax_car = endpoints['resized_softmax_car']
     softmax_road = endpoints['resized_softmax_road']
 
@@ -206,4 +180,4 @@ if __name__ == '__main__':
         warnings.warn('No GPU found. Please use a GPU to train your neural network.')
     else:
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-    train_mobilenet_v1_fcn8(load_model='vgg16', shift_hue_prob=0.5)
+    train_mobilenet_v1_fcn8(load_model='latest', shift_hue_prob=0)

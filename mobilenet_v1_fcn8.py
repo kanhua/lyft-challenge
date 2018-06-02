@@ -11,7 +11,7 @@ from tensorflow.contrib import slim
 from mobilenet_v1 import mobilenet_v1, mobilenet_v1_arg_scope
 import vgg
 import vgg_preprocessing
-
+import inception_preprocessing
 
 def linear_activation(x):
     return x
@@ -44,6 +44,9 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_sha
     # images=tf.map_fn(lambda img: preprocess_image(img,224,224,is_training), images)
 
     images = rescale_and_resize_images(images, train_image_shape)
+
+    if is_training:
+        images = tf.map_fn(inception_preprocessing.random_distort_images, images, dtype=tf.float32)
 
     with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope(is_training=is_training)):
         m_logits, end_points = mobilenet_v1(images, num_classes=1001,
