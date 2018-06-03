@@ -75,7 +75,7 @@ def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordia
         car_label = 10
         car_pixels = np.sum(gt_image[:, :, 0] == car_label)
 
-        if car_pixels > car_pixel_threshold:
+        if car_pixels >= car_pixel_threshold:
 
             gt_image = gen_one_hot_image(gt_image)
 
@@ -85,8 +85,8 @@ def preprocess_images(data_folder, car_hood_mask, image_shape=None, crop_coordia
             if show_image and np.random.rand() < 0.1:
                 skimage.io.imsave("./figures/image_{}.png".format(i), image)
 
-        if len(images)>=data_entries:
-            break
+        #if len(images)>=data_entries:
+        #    break
 
     images = np.array(images)
     gt_images = np.array(gt_images)
@@ -213,17 +213,18 @@ def gen_general_train_data():
 
 def gen_train_data():
 
-    train_data_path="./data"
     size2 = None
     car_hood_mask = np.load("hood_mask.npy")
-    preprocess_images("./data", car_hood_mask, image_shape=size2, crop_coordiates=(UPPER_CUT, 0, BOTTOM_CUT, 800))
-
+    preprocess_images("./data", car_hood_mask, image_shape=size2, crop_coordiates=(UPPER_CUT, 0, BOTTOM_CUT, 800),
+                      image_file="./data/train_data_baseline.npy",label_file="./data/train_label_baseline.npy")
 
 
 if __name__ == "__main__":
 
     #gen_validation_data()
 
-    gen_general_train_data()
+    #gen_general_train_data()
+
+    gen_train_data()
 
 

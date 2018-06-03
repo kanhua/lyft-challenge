@@ -42,9 +42,12 @@ def optimize(nn_last_layer, correct_label, learning_rate, global_step, add_class
                                                               logits=r_last_layer)
         cross_entropy_image = cross_entropy_image * weighted_label
     else:
-        cross_entropy_image=tf.losses.softmax_cross_entropy(onehot_labels=correct_label,logits=nn_last_layer)
 
-    cross_entropy_loss = tf.reduce_mean(cross_entropy_image)
+        r_correct_label = tf.reshape(correct_label, shape=(-1, 3))
+        r_last_layer = tf.reshape(nn_last_layer, shape=(-1, 3))
+        cross_entropy_image=tf.losses.softmax_cross_entropy(onehot_labels=r_correct_label,logits=r_last_layer)
+
+        cross_entropy_loss = tf.reduce_mean(cross_entropy_image)
     # cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=nn_last_layer,
     #                                                                               labels=correct_label))
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
@@ -54,11 +57,11 @@ def optimize(nn_last_layer, correct_label, learning_rate, global_step, add_class
 
 
 def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
-                            add_class_weight=False,batch_size=20,set_learning_rate=1e-3):
+                            add_class_weight=False,batch_size=20,
+                            set_learning_rate=1e-3,data_aug_faster_mode=False):
     num_classes = 3
-    image_shape = (224 * 2, 224 * 3)
 
-    image_data = ImageNpy("./data/train_data.npy", "./data/train_label.npy")
+    image_data = ImageNpy("./data/train_data_baseline.npy", "./data/train_label_baseline.npy")
     get_batches_fn = image_data.get_bathes_fn_with_crop
 
     # Load pretrained mobilenet_v1
@@ -77,11 +80,11 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
     cropped_input_image = cropped_stacked_image_label[:, :, :, 0:3]
     cropped_label = cropped_stacked_image_label[:, :, :, 3:3 + num_classes]
 
-    tf.summary.image('cropped_label', tf.expand_dims(cropped_label[:, :, :, 1], axis=3))
+    #tf.summary.image('cropped_label', tf.expand_dims(cropped_label[:, :, :, 1], axis=3))
 
     final_layer, endpoints = mobilenetv1_fcn8_model(cropped_input_image, num_classes=3, is_training=True,
                                                     raw_image_shape=(520 - UPPER_CUT, 800),
-                                                    decoder="fcn8")
+                                                    decoder="fcn8",data_aug_faster_mode=data_aug_faster_mode)
 
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
 
@@ -125,7 +128,7 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
         for ep in range(epochs):
             print("epoch: {}".format(ep))
             for image, label in get_batches_fn(batch_size, crop_size=None, shift_hue_prob=shift_hue_prob,
-                                               filter=True):
+                                               filter=False):
                 summary, _, loss, step_count = sess.run([merged, train_op, cross_entropy_loss, global_step],
                                                         feed_dict={input_image: image, correct_label: label,
                                                                    learning_rate: set_learning_rate})
@@ -184,4 +187,4 @@ if __name__ == '__main__':
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
     train_mobilenet_v1_fcn8(load_model='mobilenetv1', shift_hue_prob=0,
                             add_class_weight=False, batch_size=20,
-                            set_learning_rate=1e-3)
+                            set_learning_rate=1e-3,data_aug_faster_mode=False)

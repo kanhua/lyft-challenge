@@ -245,7 +245,8 @@ def preprocess_for_train(image, height, width, bbox,
 
 def random_distort_images(distorted_image, fast_mode=False):
     with tf.name_scope('random_distort'):
-        # if distorted_image.dtype != tf.float32:
+        if distorted_image.dtype != tf.float32:
+            raise ValueError("the input should be float")
         float_image = tf.image.convert_image_dtype(distorted_image, dtype=tf.float32)
         # Randomly distort the colors. There are 1 or 4 ways to do it.
         num_distort_cases = 1 if fast_mode else 4

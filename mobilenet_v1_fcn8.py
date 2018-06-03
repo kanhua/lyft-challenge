@@ -30,6 +30,7 @@ def mobilenet_rescale_from_float(images):
 
 
 def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_shape=(520 - 170, 800),
+                           data_aug_faster_mode=False,
                            decoder='fcn8'):
     train_image_shape = (224 * 2, 224 * 4)
 
@@ -43,10 +44,13 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_sha
 
     # images=tf.map_fn(lambda img: preprocess_image(img,224,224,is_training), images)
 
+    tf.summary.image('image before resize',tf.expand_dims(images[0],0))
+
     images = rescale_and_resize_images(images, train_image_shape)
 
     if is_training:
-        images = tf.map_fn(inception_preprocessing.random_distort_images, images, dtype=tf.float32)
+        images = tf.map_fn(lambda x: inception_preprocessing.random_distort_images(x,fast_mode=data_aug_faster_mode),
+                           images, dtype=tf.float32)
 
     with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope(is_training=is_training)):
         m_logits, end_points = mobilenet_v1(images, num_classes=1001,
