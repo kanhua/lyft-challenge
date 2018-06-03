@@ -15,33 +15,34 @@ from inception_preprocessing import random_distort_images, preprocess_image_labe
 import tensorflow.contrib.slim as slim
 
 
-def optimize(nn_last_layer, correct_label, learning_rate, global_step):
+def optimize(nn_last_layer, correct_label, learning_rate, global_step, add_class_weight=False):
     """
     Build the TensorFLow loss and optimizer operations.
 
+    :param add_class_weight:
     :param nn_last_layer: TF Tensor of the last layer in the neural network
     :param correct_label: TF Placeholder for the correct label image
     :param learning_rate: TF Placeholder for the learning rate
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
 
-    weight = tf.constant(CLASS_WEIGHT, dtype=tf.float32)
-    f_correct_label = tf.cast(correct_label, dtype=tf.float32)
-    weighted_label = tf.multiply(f_correct_label, weight)
-    # print(weighted_label.shape)
+    if add_class_weight:
+        weight = tf.constant(CLASS_WEIGHT, dtype=tf.float32)
+        f_correct_label = tf.cast(correct_label, dtype=tf.float32)
+        weighted_label = tf.multiply(f_correct_label, weight)
 
-    # weighted_label = tf.reshape(weighted_label, axis=1)
-    # weighted_label=tf.reshape(weighted_label,shape=(-1,3))
-    weighted_label = tf.reduce_sum(weighted_label, axis=3)
-    # print(weighted_label.shape)
+        weighted_label = tf.reduce_sum(weighted_label, axis=3)
+        # print(weighted_label.shape)
 
-    r_correct_label = tf.reshape(correct_label, shape=(-1, 3))
-    r_last_layer = tf.reshape(nn_last_layer, shape=(-1, 3))
-    # r_weighted_label=tf.reshape(weighted_label,shape=(-1,3))
+        r_correct_label = tf.reshape(correct_label, shape=(-1, 3))
+        r_last_layer = tf.reshape(nn_last_layer, shape=(-1, 3))
+        # r_weighted_label=tf.reshape(weighted_label,shape=(-1,3))
 
-    cross_entropy_image = tf.losses.softmax_cross_entropy(onehot_labels=r_correct_label,
-                                                          logits=r_last_layer)
-    cross_entropy_image = cross_entropy_image * weighted_label
+        cross_entropy_image = tf.losses.softmax_cross_entropy(onehot_labels=r_correct_label,
+                                                              logits=r_last_layer)
+        cross_entropy_image = cross_entropy_image * weighted_label
+    else:
+        cross_entropy_image=tf.losses.softmax_cross_entropy(onehot_labels=correct_label,logits=nn_last_layer)
 
     cross_entropy_loss = tf.reduce_mean(cross_entropy_image)
     # cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=nn_last_layer,
@@ -52,7 +53,8 @@ def optimize(nn_last_layer, correct_label, learning_rate, global_step):
     return train_op, cross_entropy_loss
 
 
-def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
+def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
+                            add_class_weight=False,batch_size=20,set_learning_rate=1e-3):
     num_classes = 3
     image_shape = (224 * 2, 224 * 3)
 
@@ -83,7 +85,8 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
 
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
 
-    train_op, cross_entropy_loss = optimize(final_layer, cropped_label, learning_rate, global_step)
+    train_op, cross_entropy_loss = optimize(final_layer, cropped_label,
+                                            learning_rate, global_step,add_class_weight=add_class_weight)
 
     tf.summary.scalar('cross_entropy_loss', cross_entropy_loss)
 
@@ -118,15 +121,14 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0):
 
         train_writer = tf.summary.FileWriter('./log' + '/train', sess.graph)
 
-        epochs = 50
-        batch_size = 10
+        epochs = 15
         for ep in range(epochs):
             print("epoch: {}".format(ep))
             for image, label in get_batches_fn(batch_size, crop_size=None, shift_hue_prob=shift_hue_prob,
                                                filter=True):
                 summary, _, loss, step_count = sess.run([merged, train_op, cross_entropy_loss, global_step],
                                                         feed_dict={input_image: image, correct_label: label,
-                                                                   learning_rate: 0.0005})
+                                                                   learning_rate: set_learning_rate})
                 print("loss: = {:.5f}".format(loss))
                 train_writer.add_summary(summary, global_step=step_count)
                 saver.save(sess, './model_ckpt/model')
@@ -180,4 +182,6 @@ if __name__ == '__main__':
         warnings.warn('No GPU found. Please use a GPU to train your neural network.')
     else:
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
-    train_mobilenet_v1_fcn8(load_model='latest', shift_hue_prob=0)
+    train_mobilenet_v1_fcn8(load_model='mobilenetv1', shift_hue_prob=0,
+                            add_class_weight=False, batch_size=20,
+                            set_learning_rate=1e-3)

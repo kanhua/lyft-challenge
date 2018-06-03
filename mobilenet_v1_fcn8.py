@@ -31,7 +31,7 @@ def mobilenet_rescale_from_float(images):
 
 def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_shape=(520 - 170, 800),
                            decoder='fcn8'):
-    train_image_shape = (224 * 2, 224 * 3)
+    train_image_shape = (224 * 2, 224 * 4)
 
     if decoder == 'fcn8':
         decoder_fn = mobilenet_v1_fcn_decoder
