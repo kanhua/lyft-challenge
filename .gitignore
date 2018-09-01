@@ -12,6 +12,8 @@ model_archive/
 pretrained_models/
 model_ckpt/
 data/
+outputvideo.mp4
+ans.json
 
 # User-specific stuff:
 .idea/**/workspace.xml

@@ -48,9 +48,9 @@ def mobilenetv1_fcn8_model(images, num_classes, is_training=False, raw_image_sha
 
     images = rescale_and_resize_images(images, train_image_shape)
 
-    if is_training:
-        images = tf.map_fn(lambda x: inception_preprocessing.random_distort_images(x,fast_mode=data_aug_faster_mode),
-                           images, dtype=tf.float32)
+    #if is_training:
+    #    images = tf.map_fn(lambda x: inception_preprocessing.random_distort_images(x,fast_mode=data_aug_faster_mode),
+    #                       images, dtype=tf.float32)
 
     with tf.contrib.slim.arg_scope(mobilenet_v1_arg_scope(is_training=is_training)):
         m_logits, end_points = mobilenet_v1(images, num_classes=1001,

@@ -1,4 +1,4 @@
-import os.path
+from os.path import join
 import tensorflow as tf
 import helper
 import warnings
@@ -59,13 +59,24 @@ def optimize(nn_last_layer, correct_label, learning_rate, global_step, add_class
 def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
                             add_class_weight=False,batch_size=20,
                             set_learning_rate=1e-3,data_aug_faster_mode=False):
+    """
+    Main program for training
+
+    :param load_model: "latest", "mobilenetv1" or "vgg16"
+    :param shift_hue_prob: the portion of images that shifts the hue values in the vehicles
+    :param add_class_weight: add weighting in the loss function to balance vehicles
+    :param batch_size: number of data per batch
+    :param set_learning_rate: learning rate
+    :param data_aug_faster_mode: faster mode in inception_preprocessing.random_distort_images()
+    :return:
+    """
     num_classes = 3
 
-    image_data = ImageNpy("./data/train_data_baseline.npy", "./data/train_label_baseline.npy")
+    image_data = ImageNpy(join("data","train_data_baseline.npy"), join("data","train_label_baseline.npy"))
     get_batches_fn = image_data.get_bathes_fn_with_crop
 
     # Load pretrained mobilenet_v1
-    pretrained_model_path = "./pretrained_models/mobilenet_v1_1.0_224_ckpt/mobilenet_v1_1.0_224.ckpt"
+    pretrained_model_path = join("pretrained_models","mobilenet_v1_1.0_224_ckpt","mobilenet_v1_1.0_224.ckpt")
 
     input_image = tf.placeholder(tf.uint8, shape=(None, None, None, 3))
     correct_label = tf.placeholder(tf.uint8, [None, None, None, num_classes], name='correct_label')
@@ -105,7 +116,7 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
             sess.run(tf.global_variables_initializer())
         elif load_model=='vgg16':
             get_var = slim.get_model_variables('vgg_16')
-            vgg_pretrained_path="./pretrained_models/vgg16/vgg_16.ckpt"
+            vgg_pretrained_path=join("pretrained_models","vgg16/vgg_16.ckpt")
             sess_load = slim.assign_from_checkpoint_fn(vgg_pretrained_path, get_var)
             sess_load(sess)
             sess.run(tf.global_variables_initializer())
@@ -113,7 +124,7 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
         elif load_model == "latest":
             # saver.restore(sess,"./model_ckpt_udacity_trained/model")
             get_var = slim.get_variables()
-            sess_load = slim.assign_from_checkpoint_fn("./model_ckpt/model", get_var)
+            sess_load = slim.assign_from_checkpoint_fn(join("model_ckpt","model", get_var))
             sess_load(sess)
             # sess.run(tf.global_variables_initializer())
         else:
@@ -122,7 +133,7 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
         # print(slim.get_model_variables())
         # print(len(slim.get_model_variables()))
 
-        train_writer = tf.summary.FileWriter('./log' + '/train', sess.graph)
+        train_writer = tf.summary.FileWriter(join('log' , 'train'), sess.graph)
 
         epochs = 15
         for ep in range(epochs):
@@ -134,7 +145,7 @@ def train_mobilenet_v1_fcn8(load_model="latest", shift_hue_prob=0,
                                                                    learning_rate: set_learning_rate})
                 print("loss: = {:.5f}".format(loss))
                 train_writer.add_summary(summary, global_step=step_count)
-                saver.save(sess, './model_ckpt/model')
+                saver.save(sess, join('model_ckpt','model'))
 
 
 def mask_engine_hood(softmax_tensor):
