@@ -197,5 +197,5 @@ if __name__ == '__main__':
     else:
         print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
     train_mobilenet_v1_fcn8(load_model='mobilenetv1', shift_hue_prob=0,
-                            add_class_weight=False, batch_size=20,
+                            add_class_weight=False, batch_size=5,
                             set_learning_rate=1e-3,data_aug_faster_mode=False)
